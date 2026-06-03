@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { forceResyncQueue } from '@/lib/sync/force-resync';
 import { reloadAppVersion } from '@/lib/sync/reload';
 import { summarizeDrift } from '@/lib/sync/drift';
+import { dedupeAgainstServer } from '@/lib/sync/dedupe';
 import { useDriftStatus } from '@/hooks/useDriftStatus';
 import { useSession } from '@/lib/supabase/session';
 
@@ -83,12 +84,18 @@ export default function DevToolsDock() {
     if (busy) return;
     setBusy('resync');
     try {
+      // Phase 1 — clear "ghost" rows in Dexie that don't exist on Supabase.
+      // Catches anything the new pull-guard prevents going forward.
+      const sweep = await dedupeAgainstServer(userId);
+      // Phase 2 — kick the queue.
       const r = await forceResyncQueue();
       const total = r.reset + r.revived;
+      const sweepTotal = sweep.visitsRemoved + sweep.itemsRemoved;
+      const parts: string[] = [];
+      if (sweepTotal > 0) parts.push(`cleaned ${sweepTotal}`);
+      if (total > 0) parts.push(`kicked ${total} (reset ${r.reset} · revived ${r.revived})`);
       showToast(
-        total === 0
-          ? '⬆ ไม่มีอะไรค้าง — queue ว่าง'
-          : `⬆ kicked ${total} (reset ${r.reset} · revived ${r.revived})`,
+        parts.length === 0 ? '⬆ ไม่มีอะไรค้าง — queue ว่าง' : `⬆ ${parts.join(' · ')}`,
         'warn',
       );
       void refresh();

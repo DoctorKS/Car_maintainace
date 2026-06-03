@@ -258,8 +258,22 @@ export async function deleteVisit(visitId: string): Promise<void> {
     'rw',
     [db.maintenance_visits, db.maintenance_items, db.pending_mutations],
     async () => {
+      // Snapshot items BEFORE we delete them so we can enqueue a tombstone
+      // for each one. The server's ON DELETE CASCADE would handle it
+      // implicitly, but the pull guard in pull.ts skips any row whose id
+      // appears in pending_mutations as a delete op — so we need the
+      // tombstones to live in the queue, not just rely on the cascade.
+      // Without these explicit enqueues, a pull that runs between this
+      // local delete and the flush will resurrect the items (server still
+      // has them), creating "duplicate ใน app แต่ไม่มีใน Supabase".
+      const itemRows = await db.maintenance_items.where('visit_id').equals(visitId).toArray();
+
       await db.maintenance_visits.delete(visitId);
       await db.maintenance_items.where('visit_id').equals(visitId).delete();
+
+      for (const it of itemRows) {
+        await enqueue('maintenance_items', 'delete', { id: it.id, user_id: v.user_id });
+      }
       await enqueue('maintenance_visits', 'delete', { id: visitId, user_id: v.user_id });
     },
   );
