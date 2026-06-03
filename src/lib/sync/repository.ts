@@ -107,6 +107,7 @@ export async function insertVisit(
     service_center_id: draft.serviceCenterId,
     receipt_image_path: receiptPath,
     notes: draft.notes?.trim() ? draft.notes.trim() : null,
+    is_scheduled: Boolean(draft.isScheduled),
     created_at: created,
     updated_at: created,
   };
@@ -193,6 +194,8 @@ export async function updateVisit(
           ? draft.notes.trim()
           : null
         : existing.notes,
+    is_scheduled:
+      draft.isScheduled !== undefined ? Boolean(draft.isScheduled) : existing.is_scheduled,
     updated_at,
   };
 

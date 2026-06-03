@@ -12,6 +12,7 @@ import { useVisitWithItems } from '@/hooks/useMaintenanceVisits';
 import { compressImage } from '@/lib/image';
 import { deleteVisit, insertVisit, updateVisit } from '@/lib/sync/repository';
 import { fromLocalIsoDate, toLocalIsoDate } from '@/lib/thai-date';
+import { breakdown } from '@/lib/vat';
 import type { DraftItem } from '@/types/domain';
 
 const emptyRows = (): Record<CategoryCode, DraftItem[]> => ({
@@ -51,6 +52,7 @@ export default function AddMaintenancePage() {
   );
   const [keepExistingReceiptPath, setKeepExistingReceiptPath] = useState<string | null>(null);
   const [visitNotes, setVisitNotes] = useState<string>('');
+  const [isScheduled, setIsScheduled] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +85,7 @@ export default function AddMaintenancePage() {
     setCenterId(existing.service_center_id);
     setKeepExistingReceiptPath(existing.receipt_image_path);
     setVisitNotes(existing.notes ?? '');
+    setIsScheduled(Boolean(existing.is_scheduled));
     const next = emptyRows();
     for (const it of existing.items) {
       if (!isCategoryCode(it.category_code)) continue;
@@ -118,7 +121,8 @@ export default function AddMaintenancePage() {
     .flatMap((c) => rows[c])
     .filter((it) => it.partName.trim().length > 0);
 
-  const totalAmount = allItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0);
+  const subtotal = allItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0);
+  const totals = breakdown(subtotal);
 
   const save = async () => {
     if (!userId || !vehicle) return;
@@ -140,6 +144,7 @@ export default function AddMaintenancePage() {
           serviceCenterId: centerId,
           items: allItems,
           notes: visitNotes,
+          isScheduled,
           receiptBlob: receipt?.blob ?? null,
           receiptMime: receipt?.mime ?? null,
         });
@@ -151,6 +156,7 @@ export default function AddMaintenancePage() {
           serviceCenterId: centerId,
           items: allItems,
           notes: visitNotes,
+          isScheduled,
           receiptBlob: receipt?.blob ?? null,
           receiptMime: receipt?.mime ?? null,
         });
@@ -255,6 +261,19 @@ export default function AddMaintenancePage() {
           </div>
         </div>
 
+        {/* "เช็คระยะ" — scheduled maintenance check. Tile-styled label sits
+            directly below the ศูนย์บริการ field per spec. */}
+        <label className="flex items-center gap-3 rounded-card bg-card px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={isScheduled}
+            onChange={(e) => setIsScheduled(e.target.checked)}
+            className="h-5 w-5 shrink-0 cursor-pointer accent-brand"
+          />
+          <span className="text-sm font-medium text-ink">เช็คระยะ</span>
+          <span className="ml-auto text-[11px] text-sub">เช่น 10,000 / 20,000 km</span>
+        </label>
+
         {CATEGORIES.map((c) => (
           <CategorySection
             key={c.code}
@@ -293,10 +312,22 @@ export default function AddMaintenancePage() {
           </button>
         )}
 
-        <div className="sticky bottom-0 -mx-4 mt-4 border-t border-white/20 bg-brand/90 px-4 py-3 backdrop-blur">
-          <div className="mb-2 flex items-center justify-between text-sm text-white">
-            <span className="text-white/85">รวมทั้งหมด</span>
-            <span className="text-lg font-bold">฿ {totalAmount.toLocaleString('th-TH')}</span>
+        <div className="sticky bottom-0 -mx-4 mt-4 border-t border-white/20 bg-brand/95 px-4 py-3 backdrop-blur">
+          <div className="mb-3 space-y-1 text-sm text-white">
+            <div className="flex items-center justify-between text-white/80">
+              <span>รวม (ก่อน VAT)</span>
+              <span>฿ {totals.subtotal.toLocaleString('th-TH')}</span>
+            </div>
+            <div className="flex items-center justify-between text-white/80">
+              <span>ภาษีมูลค่าเพิ่ม 7%</span>
+              <span>฿ {totals.vat.toLocaleString('th-TH')}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/20 pt-1.5">
+              <span className="font-semibold">รวมทั้งหมด</span>
+              <span className="text-lg font-bold">
+                ฿ {totals.grandTotal.toLocaleString('th-TH')}
+              </span>
+            </div>
           </div>
           <button
             type="button"

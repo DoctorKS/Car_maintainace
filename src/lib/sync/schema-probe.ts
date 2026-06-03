@@ -3,88 +3,111 @@ import { supabase } from '@/lib/supabase/client';
 /**
  * Detect schema drift between the client code and the live Supabase project.
  *
- * Right now the only optional column we probe is `maintenance_items.notes`
- * (added by `supabase/migrations/0002_item_notes.sql`). If the migration
- * wasn't applied, every per-item upsert that carries a `notes` field is
- * rejected by PostgREST with code 42703 ("column ... does not exist"),
- * and the offline queue retries forever.
+ * Optional columns we probe:
+ *   - `maintenance_items.notes`         — added by 0002_item_notes.sql
+ *   - `maintenance_visits.is_scheduled` — added by 0003_visit_scheduled.sql
  *
- * Once the probe sets the state, `flush.ts` strips the offending field on
- * the fly so existing data still syncs (notes are lost on items if the
- * column is missing — fix is to run 0002 — but every other field lands).
+ * When a column is missing, `flush.ts` strips it from upserts so the rest
+ * of the row still syncs. The user should still run the migration; the
+ * console.error message points at the file.
  */
 
-type SchemaState = 'unknown' | 'ok' | 'item-notes-missing';
+export type SchemaIssue = 'item-notes' | 'visit-scheduled';
 
-let _state: SchemaState = 'unknown';
-let _inFlight: Promise<SchemaState> | null = null;
+const _missing = new Set<SchemaIssue>();
+let _itemsProbed = false;
+let _visitsProbed = false;
+let _itemsInFlight: Promise<void> | null = null;
+let _visitsInFlight: Promise<void> | null = null;
 
-export function getSchemaState(): SchemaState {
-  return _state;
+export const hasItemNotes = (): boolean => !_missing.has('item-notes');
+export const hasVisitScheduled = (): boolean => !_missing.has('visit-scheduled');
+
+export function getMissingColumns(): readonly SchemaIssue[] {
+  return Array.from(_missing);
 }
 
-export function hasItemNotes(): boolean {
-  // Optimistic when we haven't probed yet — flush will retry on failure.
-  return _state !== 'item-notes-missing';
-}
-
-/** Force a re-probe (e.g. after the user says they've run a migration). */
+/** Force a re-probe (e.g. after the user signs into a different project). */
 export function resetSchemaProbe(): void {
-  _state = 'unknown';
-  _inFlight = null;
+  _missing.clear();
+  _itemsProbed = false;
+  _visitsProbed = false;
+  _itemsInFlight = null;
+  _visitsInFlight = null;
 }
 
-/** Mark the column missing — called by flush.ts when an upsert error confirms it. */
+/** Called by flush.ts when an upsert error confirms the column is missing. */
 export function markItemNotesMissing(): void {
-  if (_state === 'item-notes-missing') return;
-  _state = 'item-notes-missing';
+  if (_missing.has('item-notes')) return;
+  _missing.add('item-notes');
   console.error(
-    "[schema] maintenance_items.notes confirmed missing from upsert error. " +
-      "Run supabase/migrations/0002_item_notes.sql in the Supabase SQL editor to keep the per-item note column. " +
-      "Until then the client will strip 'notes' so the rest of each item still syncs.",
+    "[schema] maintenance_items.notes confirmed missing from upsert. " +
+      "Run supabase/migrations/0002_item_notes.sql in the Supabase SQL editor. " +
+      "Client will keep stripping 'notes' so the rest of each item still syncs.",
   );
 }
 
-export async function probeSchema(): Promise<SchemaState> {
-  if (_state !== 'unknown') return _state;
-  if (_inFlight) return _inFlight;
+export function markVisitScheduledMissing(): void {
+  if (_missing.has('visit-scheduled')) return;
+  _missing.add('visit-scheduled');
+  console.error(
+    "[schema] maintenance_visits.is_scheduled confirmed missing. " +
+      "Run supabase/migrations/0003_visit_scheduled.sql in the Supabase SQL editor. " +
+      "Client will keep stripping 'is_scheduled' so visits still sync (เช็คระยะ flag will be lost until the migration runs).",
+  );
+}
 
-  _inFlight = (async () => {
+const PGRST_COLUMN_MISSING = '42703';
+
+function looksLikeMissingColumn(error: { code?: string; message?: string }, col: string): boolean {
+  if ((error.code ?? '') === PGRST_COLUMN_MISSING) return true;
+  const m = error.message ?? '';
+  if (new RegExp(`column.*${col}.*does not exist`, 'i').test(m)) return true;
+  if (new RegExp(`could not find.*'${col}'`, 'i').test(m)) return true;
+  return false;
+}
+
+export async function probeSchema(): Promise<void> {
+  await Promise.all([probeItemNotes(), probeVisitScheduled()]);
+}
+
+async function probeItemNotes(): Promise<void> {
+  if (_itemsProbed) return;
+  if (_itemsInFlight) return _itemsInFlight;
+  _itemsInFlight = (async () => {
     try {
-      const { error } = await supabase
-        .from('maintenance_items')
-        .select('notes')
-        .limit(1);
-      if (error) {
-        const msg = error.message ?? '';
-        const code = (error as { code?: string }).code ?? '';
-        const isMissingColumn =
-          code === '42703' ||
-          /column.*notes.*does not exist/i.test(msg) ||
-          /could not find.*'notes'/i.test(msg);
-        if (isMissingColumn) {
-          _state = 'item-notes-missing';
-          console.error(
-            "[schema] maintenance_items.notes is missing on the live Supabase project. " +
-              "Run supabase/migrations/0002_item_notes.sql in the SQL editor to enable per-item notes. " +
-              "The client will strip 'notes' from item upserts in the meantime so the rest of the row still syncs.",
-          );
-        } else {
-          // Some other error (auth, RLS, network). Don't assume schema is broken.
-          _state = 'ok';
-        }
-      } else {
-        _state = 'ok';
+      const { error } = await supabase.from('maintenance_items').select('notes').limit(1);
+      if (error && looksLikeMissingColumn(error, 'notes')) {
+        markItemNotesMissing();
       }
     } catch (e) {
-      // Network error — assume ok and try again later (resetSchemaProbe).
-      console.warn('[schema] probe failed transient', e);
-      _state = 'ok';
+      console.warn('[schema] item-notes probe transient', e);
     } finally {
-      _inFlight = null;
+      _itemsProbed = true;
+      _itemsInFlight = null;
     }
-    return _state;
   })();
+  return _itemsInFlight;
+}
 
-  return _inFlight;
+async function probeVisitScheduled(): Promise<void> {
+  if (_visitsProbed) return;
+  if (_visitsInFlight) return _visitsInFlight;
+  _visitsInFlight = (async () => {
+    try {
+      const { error } = await supabase
+        .from('maintenance_visits')
+        .select('is_scheduled')
+        .limit(1);
+      if (error && looksLikeMissingColumn(error, 'is_scheduled')) {
+        markVisitScheduledMissing();
+      }
+    } catch (e) {
+      console.warn('[schema] visit-scheduled probe transient', e);
+    } finally {
+      _visitsProbed = true;
+      _visitsInFlight = null;
+    }
+  })();
+  return _visitsInFlight;
 }

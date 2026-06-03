@@ -38,6 +38,8 @@ export interface DraftVisit {
   mileage: number;
   serviceCenterId: string | null;
   notes?: string;
+  /** "เช็คระยะ" tick box on the Add form. */
+  isScheduled?: boolean;
   items: DraftItem[];
   receiptBlob?: Blob | null;
   receiptMime?: string | null;

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { formatThaiMedium } from '@/lib/thai-date';
 import { getCategory, isCategoryCode } from '@/lib/categories';
+import { breakdown } from '@/lib/vat';
 import type { MaintenanceVisitWithItems } from '@/types/domain';
 import CategoryIcon from './CategoryIcon';
 import ReceiptImageButton from './ReceiptImageButton';
@@ -39,12 +40,20 @@ function PencilIcon({ className }: { className?: string }) {
 export default function MaintenanceCard({ visit }: Props) {
   const date = new Date(visit.service_date + 'T00:00:00');
   const centerName = visit.service_center?.name ?? '—';
+  const totals = breakdown(visit.total_amount);
   return (
     <div className="rounded-card bg-card p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold leading-tight text-ink">
-            {formatThaiMedium(date)}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-semibold leading-tight text-ink">
+              {formatThaiMedium(date)}
+            </span>
+            {visit.is_scheduled && (
+              <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                เช็คระยะ
+              </span>
+            )}
           </div>
           <div className="text-xs text-sub">{centerName}</div>
           <div className="mt-0.5 text-[11px] text-sub">
@@ -62,10 +71,12 @@ export default function MaintenanceCard({ visit }: Props) {
               <PencilIcon className="h-4 w-4" />
             </Link>
           </div>
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-sub">รวม</div>
-            <div className="text-base font-bold leading-tight text-ink">
-              ฿ {baht(visit.total_amount)}
+          <div className="text-right leading-tight">
+            <div className="text-[10px] text-sub">รวม (ก่อน VAT)</div>
+            <div className="text-xs text-ink/80">฿ {baht(totals.subtotal)}</div>
+            <div className="text-[10px] text-sub">VAT 7% ฿ {baht(totals.vat)}</div>
+            <div className="mt-0.5 text-base font-bold text-brand">
+              ฿ {baht(totals.grandTotal)}
             </div>
           </div>
         </div>

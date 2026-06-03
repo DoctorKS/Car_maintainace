@@ -1,7 +1,12 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { db, META_KEYS, type PendingMutation, type PendingUpload } from './db';
 import type { EntityName } from '@/types/db';
-import { hasItemNotes, markItemNotesMissing } from './schema-probe';
+import {
+  hasItemNotes,
+  hasVisitScheduled,
+  markItemNotesMissing,
+  markVisitScheduledMissing,
+} from './schema-probe';
 
 /**
  * Drain `pending_mutations` and `pending_uploads` against Supabase.
@@ -88,16 +93,27 @@ async function applyMutation(m: PendingMutation): Promise<void> {
   }
 
   // Strip optional columns that the live Supabase project may not have yet.
-  // For now the only one is maintenance_items.notes (added by migration
-  // 0002_item_notes.sql). We omit it when:
+  // Currently:
+  //   - maintenance_items.notes        — 0002_item_notes.sql
+  //   - maintenance_visits.is_scheduled — 0003_visit_scheduled.sql
+  // We omit them when:
   //   - the value is null/empty (always — no signal lost), OR
   //   - the schema probe has confirmed the column is missing (we'd rather
-  //     drop the note than block every per-item insert).
+  //     drop the field than block every insert).
   if (entity === 'maintenance_items' && 'notes' in payload) {
     const notes = payload.notes;
     const isBlank = notes === null || notes === undefined || notes === '';
     if (isBlank || !hasItemNotes()) {
       const { notes: _drop, ...rest } = payload;
+      payload = rest as typeof payload;
+    }
+  }
+  if (entity === 'maintenance_visits' && 'is_scheduled' in payload) {
+    const scheduled = payload.is_scheduled;
+    // Defaults to false in DB; omit when the client says false so a DB
+    // without the column still inserts.
+    if (scheduled === false || scheduled === null || scheduled === undefined || !hasVisitScheduled()) {
+      const { is_scheduled: _drop, ...rest } = payload;
       payload = rest as typeof payload;
     }
   }
@@ -110,16 +126,26 @@ async function applyMutation(m: PendingMutation): Promise<void> {
     .select()
     .single();
   if (error) {
-    // If the failure is the missing-notes column, mark state so the very
-    // next retry strips the field instead of repeating this round-trip
-    // per row.
-    if (
-      entity === 'maintenance_items' &&
-      ((error as { code?: string }).code === '42703' ||
-        /column.*notes.*does not exist/i.test(error.message ?? '') ||
-        /could not find.*'notes'/i.test(error.message ?? ''))
-    ) {
-      markItemNotesMissing();
+    // If the failure is a missing optional column, mark state so the very
+    // next retry strips the field instead of looping through this error.
+    const code = (error as { code?: string }).code ?? '';
+    const msg = error.message ?? '';
+    if (entity === 'maintenance_items') {
+      if (
+        code === '42703' ||
+        /column.*notes.*does not exist/i.test(msg) ||
+        /could not find.*'notes'/i.test(msg)
+      ) {
+        markItemNotesMissing();
+      }
+    } else if (entity === 'maintenance_visits') {
+      if (
+        code === '42703' ||
+        /column.*is_scheduled.*does not exist/i.test(msg) ||
+        /could not find.*'is_scheduled'/i.test(msg)
+      ) {
+        markVisitScheduledMissing();
+      }
     }
     throw error;
   }

@@ -37,6 +37,8 @@ export interface MaintenanceVisitRow {
   service_center_id: string | null;
   receipt_image_path: string | null;
   notes: string | null;
+  /** "เช็คระยะ" — added by 0003_visit_scheduled.sql; false for pre-migration rows. */
+  is_scheduled: boolean;
   created_at: string;
   updated_at: string;
 }
