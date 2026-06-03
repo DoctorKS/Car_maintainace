@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { db, META_KEYS, type PendingMutation, type PendingUpload } from './db';
 import type { EntityName } from '@/types/db';
+import { hasItemNotes, markItemNotesMissing } from './schema-probe';
 
 /**
  * Drain `pending_mutations` and `pending_uploads` against Supabase.
@@ -78,12 +79,27 @@ async function drainMutations(): Promise<void> {
 
 async function applyMutation(m: PendingMutation): Promise<void> {
   const entity = m.entity as EntityName;
-  const payload = m.payload as { id?: string; local_uuid?: string } & Record<string, unknown>;
+  let payload = m.payload as { id?: string; local_uuid?: string } & Record<string, unknown>;
 
   if (m.op === 'delete') {
     const { error } = await supabase.from(entity).delete().eq('id', payload.id as string);
     if (error) throw error;
     return;
+  }
+
+  // Strip optional columns that the live Supabase project may not have yet.
+  // For now the only one is maintenance_items.notes (added by migration
+  // 0002_item_notes.sql). We omit it when:
+  //   - the value is null/empty (always — no signal lost), OR
+  //   - the schema probe has confirmed the column is missing (we'd rather
+  //     drop the note than block every per-item insert).
+  if (entity === 'maintenance_items' && 'notes' in payload) {
+    const notes = payload.notes;
+    const isBlank = notes === null || notes === undefined || notes === '';
+    if (isBlank || !hasItemNotes()) {
+      const { notes: _drop, ...rest } = payload;
+      payload = rest as typeof payload;
+    }
   }
 
   // upsert by (user_id, local_uuid) when available — idempotent across replays.
@@ -93,7 +109,20 @@ async function applyMutation(m: PendingMutation): Promise<void> {
     .upsert(payload, { onConflict })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    // If the failure is the missing-notes column, mark state so the very
+    // next retry strips the field instead of repeating this round-trip
+    // per row.
+    if (
+      entity === 'maintenance_items' &&
+      ((error as { code?: string }).code === '42703' ||
+        /column.*notes.*does not exist/i.test(error.message ?? '') ||
+        /could not find.*'notes'/i.test(error.message ?? ''))
+    ) {
+      markItemNotesMissing();
+    }
+    throw error;
+  }
 
   // Adopt server-canonical row into local cache (clear dirty flag).
   if (data) {
