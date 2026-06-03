@@ -6,12 +6,12 @@ import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ServiceCenterDropdown from '@/components/ServiceCenterDropdown';
 import CategorySection from '@/components/CategorySection';
 import Spinner from '@/components/Spinner';
-import { CATEGORIES, isCategoryCode, type CategoryCode } from '@/lib/categories';
+import { CATEGORIES, getCategory, isCategoryCode, type CategoryCode } from '@/lib/categories';
 import { useSession } from '@/lib/supabase/session';
 import { useVehicle } from '@/hooks/useVehicle';
 import { useVisitWithItems } from '@/hooks/useMaintenanceVisits';
 import { compressImage } from '@/lib/image';
-import { deleteVisit, insertVisit, updateVisit } from '@/lib/api';
+import { deleteVisit, insertCustomPart, insertVisit, updateVisit } from '@/lib/api';
 import { ocrReceipt, type OcrItem } from '@/lib/ocr';
 import { fromLocalIsoDate, toLocalIsoDate } from '@/lib/thai-date';
 import { breakdown } from '@/lib/vat';
@@ -155,8 +155,56 @@ export default function AddMaintenancePage() {
    * Each committed item already carries a categoryCode; merge into the
    * matching `rows[code]` array so the user can still tweak before the
    * outer save.
+   *
+   * Bugfix (2026-06-04): when an OCR'd partName isn't in the category's
+   * seed list it also isn't in the user's `custom_parts` table, so
+   * PartDropdown's `<select value={partName}>` falls back to the empty
+   * placeholder and the user sees an unlabelled row even though the
+   * state was set correctly. Insert the missing names into `custom_parts`
+   * first (best-effort — swallow the (user_id, category_code, part_name)
+   * unique conflict) and invalidate the dropdown's React Query cache.
+   * After the refetch the `<option>` exists and the select renders the
+   * value the OCR pass found.
    */
-  const handleOcrCommit = (committed: DraftItem[]) => {
+  const handleOcrCommit = async (committed: DraftItem[]) => {
+    if (!userId) {
+      setOcrItems(null);
+      return;
+    }
+
+    // Collect every (categoryCode, partName) we need to ensure exists in
+    // custom_parts. De-dupe within this batch.
+    const seen = new Set<string>();
+    const toInsert: Array<{ categoryCode: CategoryCode; partName: string }> = [];
+    for (const it of committed) {
+      const partName = it.partName.trim();
+      if (!partName) continue;
+      const key = `${it.categoryCode}${partName}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const cat = getCategory(it.categoryCode);
+      if (cat.seedParts.includes(partName)) continue; // already a dropdown option
+      toInsert.push({ categoryCode: it.categoryCode, partName });
+    }
+
+    let touchedCustom = false;
+    for (const entry of toInsert) {
+      try {
+        await insertCustomPart(userId, entry.categoryCode, entry.partName);
+        touchedCustom = true;
+      } catch (err) {
+        // Most likely the (user_id, category_code, part_name) unique
+        // constraint — the name already exists. Either way it'll be in
+        // the next custom-parts refetch, so we just keep going.
+        console.warn('[ocr] insertCustomPart skipped', entry, err);
+      }
+    }
+
+    if (touchedCustom) {
+      await queryClient.invalidateQueries({ queryKey: ['custom-parts', userId] });
+    }
+
     setRows((s) => {
       const next: Record<CategoryCode, DraftItem[]> = { ...s };
       for (const it of committed) {
