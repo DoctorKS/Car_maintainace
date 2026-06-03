@@ -16,7 +16,7 @@ with the user's JWT. Deployed on Vercel via `vercel.json`.
 ## Architectural posture: server-direct, no local mirror
 
 The previous Dexie + pending-mutations + flush-loop + delta-pull stack was
-**removed in commit `<TBD>`** (see [`BUGS.md` entry "dexie-sync-removed-radical-fix"](BUGS.md))
+**removed in commit [`df2703b`](https://github.com/DoctorKS/Car_maintainace/commit/df2703b)** (see [`BUGS.md` entry "dexie-sync-removed-radical-fix"](BUGS.md))
 after repeated duplicate / resurrection bugs that the maintenance burden of
 two-source-of-truth synchronisation couldn't justify on a single-user app.
 
@@ -56,7 +56,7 @@ Auth: Supabase Email+password; JWT in localStorage via supabase-js.
 ```
 
 That's the entire data path. Compare against the old diagram in git
-history before `<TBD>` to see what was removed.
+history before `df2703b` to see what was removed.
 
 ## Routes
 
