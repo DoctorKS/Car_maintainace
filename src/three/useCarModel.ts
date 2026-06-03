@@ -83,18 +83,14 @@ function paint(mat: MeshStandardMaterial, slot: Slot, maps: Maps): void {
       mat.roughness = 0.28;
       break;
     case 'glass':
-      mat.color.set('#0a0a0a');
-      mat.metalness = 0.95;
-      mat.roughness = 0.05;
+      // Preserve original glass tint; just make it translucent.
       mat.transparent = true;
-      mat.opacity = 0.55;
+      mat.opacity = 0.6;
       break;
     case 'body':
-      // Glossy black car paint — high metalness, low roughness for sharp
-      // highlights against the soft gradient backdrop.
-      mat.color.set('#000000');
-      mat.metalness = 0.78;
-      mat.roughness = 0.22;
+      // Default — leave the FBX material's colour, metalness, roughness
+      // untouched. Tires + lights still get their explicit texture maps
+      // above so the wheels read correctly.
       break;
   }
   mat.needsUpdate = true;
@@ -104,7 +100,12 @@ function toStandard(existing: Material | undefined, fallback: string): MeshStand
   if (existing instanceof MeshStandardMaterial) {
     return existing.clone();
   }
-  return new MeshStandardMaterial({ color: fallback, metalness: 0.6, roughness: 0.4 });
+  // Most three.js materials (Basic/Phong/Lambert/Standard/Physical) expose a
+  // .color — preserve it so the FBX's original paint shows through. Falls
+  // back to the parameter when the source doesn't have one.
+  const srcColor = (existing as { color?: { getStyle: () => string } } | undefined)?.color;
+  const color = srcColor?.getStyle?.() ?? fallback;
+  return new MeshStandardMaterial({ color, metalness: 0.5, roughness: 0.5 });
 }
 
 function applyTextures(root: Object3D, maps: Maps): void {

@@ -36,14 +36,13 @@ export default function CategorySection({ userId, categoryCode, items, onChange 
         className="flex w-full items-center justify-between gap-2 text-left"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brandSoft">
-            <CategoryIcon code={cat.code} className="h-11 w-11" />
+          <div className="grid h-14 w-14 shrink-0 place-items-center">
+            <CategoryIcon code={cat.code} className="h-14 w-14" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-[15px] font-semibold leading-tight text-ink">
-              หมวด {cat.code}: {cat.titleTh}
+              {cat.titleTh}
             </div>
-            <div className="text-[11px] text-sub">{cat.titleEn}</div>
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-sub">
