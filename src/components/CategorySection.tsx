@@ -35,15 +35,15 @@ export default function CategorySection({ userId, categoryCode, items, onChange 
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brandSoft">
-            <CategoryIcon code={cat.code} className="h-8 w-8" />
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brandSoft">
+            <CategoryIcon code={cat.code} className="h-11 w-11" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-ink">
+            <div className="truncate text-[15px] font-semibold leading-tight text-ink">
               หมวด {cat.code}: {cat.titleTh}
             </div>
-            <div className="text-[10px] text-sub">{cat.titleEn}</div>
+            <div className="text-[11px] text-sub">{cat.titleEn}</div>
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-sub">
