@@ -158,6 +158,7 @@ erDiagram
         int mileage
         text receipt_image_path
         text notes
+        bool is_scheduled "0003 migration"
         timestamptz updated_at
     }
     MAINTENANCE_ITEMS {
@@ -365,16 +366,17 @@ src/
     LoginPage.tsx                 Email + password, iOS "Add to Home Screen" hint
     DashboardPage.tsx             3-pill action row + 3D + mileage overlay + recent cards
     AddMaintenancePage.tsx        Shared form for /add AND /edit/:visitId
-    HistoryCalendarPage.tsx       Thai calendar w/ red dots, day card on tap
+    HistoryCalendarPage.tsx       Thai calendar w/ red dots + bottom monthly summary
     ByPartIndexPage.tsx           2×3 grid of category symbols (transparent, no labels)
     ByPartPage.tsx                Drill-in to category, tap part → timeline
 
   components/
-    AppShell.tsx                  Brand-blue, safe-area-aware wrapper
+    AppShell.tsx                  Brand-blue wrapper; mounts DevToolsDock
     AuthGuard.tsx                 Redirects to /login when session is null
+    DevToolsDock.tsx              Bottom-left ⬆ ↻ 🩺 controls + drift red-dot
     MileageOverlay.tsx            Inline-editable mileage on the 3D viewer
     CategoryIcon.tsx              <img> wrapper for public/icons/categories/cat-N.png
-    MaintenanceCard.tsx           Visit card with sub-card items + pencil edit + notes
+    MaintenanceCard.tsx           Visit card w/ pencil edit + เช็คระยะ pill + VAT
     MaintenanceCardList.tsx       Paginated card list
     ReceiptImageButton.tsx        Opens ReceiptModal
     ReceiptModal.tsx              Signed-URL image viewer
@@ -385,10 +387,23 @@ src/
     CategorySection.tsx           Collapsible category w/ qty + unit + total + notes
     Spinner.tsx
 
+  lib/
+    vat.ts                        VAT 7% helpers — vatOf, withVat, breakdown
+    sync/
+      ...                         repository / flush / pull / queue (above)
+      schema-probe.ts             Detects optional columns (0002, 0003) at boot
+      force-resync.ts             Resets attempts + revives dead_letters
+      reload.ts                   SW skip-waiting + location.reload
+      drift.ts                    runDriftCheck — local vs Supabase counts
+  hooks/
+    ...                           session / vehicle / maintenance / by-part (above)
+    useDriftStatus.ts             Auto-poll runDriftCheck every 5 min
+
 supabase/
   migrations/
     0001_init.sql                 Tables + RLS + new-user trigger + storage bucket
-    0002_item_notes.sql           Adds maintenance_items.notes (must be run!)
+    0002_item_notes.sql           Adds maintenance_items.notes  (run on project!)
+    0003_visit_scheduled.sql      Adds maintenance_visits.is_scheduled  (run too)
 ```
 
 ---
@@ -410,8 +425,14 @@ cp .env.example .env.local         # fill in VITE_SUPABASE_URL + VITE_SUPABASE_A
    - [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
      — tables, RLS, new-user seed trigger, storage bucket.
    - [`supabase/migrations/0002_item_notes.sql`](supabase/migrations/0002_item_notes.sql)
-     — adds `maintenance_items.notes`. **Skip this and every per-item insert
-     will fail** with `column "notes" does not exist`.
+     — adds `maintenance_items.notes`.
+   - [`supabase/migrations/0003_visit_scheduled.sql`](supabase/migrations/0003_visit_scheduled.sql)
+     — adds `maintenance_visits.is_scheduled` ("เช็คระยะ" flag).
+
+   The client self-heals if 0002 / 0003 aren't applied (schema-probe + flush
+   strip the unknown columns so the rest of each row still syncs), but
+   the per-item `notes` and the `เช็คระยะ` checkbox state are silently
+   dropped until the migration runs.
 4. Authentication → Providers → enable **Email**.
 
 Or via [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -493,31 +514,52 @@ Run Chrome DevTools → Lighthouse → PWA. Target ≥ 90.
 
 ---
 
+## DevTools dock + sync internals
+
+Three floating controls at the bottom-left of every authenticated screen
+(modelled on `/Shift_count/index.html`'s `bottom-bar`):
+
+| Icon | Function | Behaviour |
+|---|---|---|
+| ⬆ | **force-resync queue + dead-letter** | `forceResyncQueue()` resets `attempts`/`last_error` on every pending mutation, revives every row from `dead_letters` back into `pending_mutations`, then schedules a flush. Toast reports `{reset, revived}`. |
+| ↻ | **reload app version** | `swReg.update()` → `postMessage('SKIP_WAITING')` if a worker is `waiting` → `location.reload()`. IndexedDB + Workbox caches survive, so the 6 MB FBX + the offline queue are preserved. |
+| 🩺 | **drift check** | `runDriftCheck(userId)` counts `pending_mutations`, `pending_uploads`, `dead_letters`, stuck-pending (attempts > 3), and per-table `local` vs `server` (HEAD-only). Auto-polls every 5 min via `useDriftStatus`. Red dot on the 🩺 button when `drifted === true`. |
+
+`flush.ts` dead-letters mutations after `MAX_ATTEMPTS = 12` (≈ 5 min of capped
+exponential backoff). Dead-lettered rows don't auto-retry — the ⬆ button is
+the path back.
+
+`schema-probe.ts` HEAD-checks two optional columns at sign-in:
+`maintenance_items.notes` (added by 0002) and `maintenance_visits.is_scheduled`
+(0003). If either is missing, `flush.applyMutation` strips that field from
+upserts so the rest of the row still syncs. The console.error message points
+at the exact migration file to apply.
+
+VAT 7% (`src/lib/vat.ts`) is a **display-only transform**. The DB still
+stores `total_price` as the pre-VAT row total; every card / form sticky
+bar / monthly summary pipes the same `breakdown(subtotal)` so the three
+numbers (subtotal / VAT / grand total) stay consistent everywhere.
+
 ## Recent additions
 
-- **Editable visits** — every `MaintenanceCard` now has a pencil button. Tap →
-  `/edit/:visitId` (re-uses `AddMaintenancePage` with pre-fill +
-  `repository.updateVisit`). Edits propagate via `useLiveQuery` to the
-  dashboard, history, and by-part timelines automatically.
-- **Per-item notes** — each item row in the Add form has a "หมายเหตุ" textarea;
-  rendered as a 📝 pill in `MaintenanceCard` sub-rows. Backed by
-  `maintenance_items.notes` (migration 0002).
-- **Visit-level note** — a "หมายเหตุ" card above the sticky save bar; shown as a
-  brand-soft pill between the card header and items list.
-- **Three-pill dashboard** — `+ เพิ่มข้อมูล`, `ข้อมูลแยกตาม part`,
-  `ประวัติ maintainance` all share `.action-pill` styling.
-- **/by-part index** — separate page from the dashboard: 2 cols × 3 rows of big
-  transparent symbols, no labels.
-- **PNG category icons** — `public/icons/categories/cat-{1..6}.png` (10–56 KB
-  each, compressed from `/Button/*.png` originals). Replaces inline SVGs.
-- **3D viewer reverted to FBX-default colours** — the early "all black on
-  white" pass is gone; `useCarModel` body slot is a no-op so the source
-  material shows through. Soft radial-gradient backdrop kept.
-- **No on-screen sync indicator** — the previous SyncBadge gear is removed.
-  Sync still runs silently; check DevTools console for `[sync] ... error` (now
-  logged at `error` level).
-- **Card shadows = none** — `shadow-card` / `shadow-soft` Tailwind tokens are
-  intentionally empty; the white halo on blue read as glow and is gone.
+- **VAT 7%** breakdown on every `MaintenanceCard`, the Add form's sticky save
+  bar, and the new bottom-of-history monthly summary card.
+- **เช็คระยะ checkbox** below ศูนย์บริการ on the Add form; shows as a brand-tint
+  pill next to the date on cards.
+- **Monthly summary** card at the bottom of `/history` — number of visits +
+  subtotal + VAT + grand total for the displayed month, updates as the user
+  navigates.
+- **DevToolsDock** (⬆ ↻ 🩺) at bottom-left.
+- **Editable visits** — every `MaintenanceCard` has a pencil button → `/edit/:visitId`.
+- **Per-item and visit-level notes** wired end-to-end (migrations 0002 + still
+  visible in `MaintenanceCard`).
+- **Three-pill dashboard** — `+ เพิ่มข้อมูล`, `ข้อมูลแยกตาม part`, `ประวัติ` share
+  `.action-pill` styling.
+- **/by-part index** — 2 cols × 3 rows of big transparent symbols, no labels.
+- **PNG category icons** — `public/icons/categories/cat-{1..6}.png` (10–56 KB each).
+- **3D viewer reverted to FBX-default colours**; `useCarModel` body slot is a
+  no-op so the source material shows through.
+- **Card shadows = none** — `shadow-card` / `shadow-soft` tokens intentionally empty.
 
 ## Open items
 
@@ -532,5 +574,11 @@ Run Chrome DevTools → Lighthouse → PWA. Target ≥ 90.
    [`src/index.css`](src/index.css).
 3. **`gh` CLI not installed** — pushing to GitHub uses raw `git push`; there's
    no PR / issue tooling configured locally.
-4. **Migration 0002 must be applied to the live Supabase project** before users
-   can save records with the new code, or per-item inserts will fail.
+4. **Migrations 0002 + 0003 must be applied to the live Supabase project** for
+   the per-item `notes` and the `เช็คระยะ` flag to survive on the server. The
+   client self-heals (strips the unknown column) so other fields still sync,
+   but those two values are silently null on the server until the migrations
+   run.
+5. **Drift check budget** — `useDriftStatus` fires 5 HEAD requests every
+   5 min per signed-in tab. If we ever add more tables to the per-entity
+   compare, watch the cumulative request rate.
