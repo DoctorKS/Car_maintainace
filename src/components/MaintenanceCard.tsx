@@ -71,6 +71,14 @@ export default function MaintenanceCard({ visit }: Props) {
         </div>
       </div>
 
+      {/* Visit-level note (shows on dashboard recent list + history). */}
+      {visit.notes && visit.notes.trim() && (
+        <div className="mb-3 whitespace-pre-wrap rounded-tile bg-brandSoft px-3 py-2 text-xs leading-relaxed text-ink">
+          <span className="mr-1 font-semibold text-brand">หมายเหตุ:</span>
+          {visit.notes}
+        </div>
+      )}
+
       <div className="space-y-2">
         {visit.items.length === 0 && (
           <div className="rounded-tile bg-brandSoft p-3 text-center text-xs text-sub">

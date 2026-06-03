@@ -27,6 +27,7 @@ export const CATEGORIES: readonly Category[] = [
     titleEn: 'Fluids & Lubricants',
     seedParts: [
       'น้ำมันเครื่อง (Engine Oil)',
+      'น้ำมันเครื่อง 0W-30 SKY 3 ลิตร',
       'กรองน้ำมันเครื่อง (Oil Filter)',
       'น้ำมันเกียร์อัตโนมัติ (ATF)',
       'น้ำมันเฟืองท้าย / ทรานสเฟอร์ (Rear Diff / Transfer Oil)',

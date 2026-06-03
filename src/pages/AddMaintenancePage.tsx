@@ -50,6 +50,7 @@ export default function AddMaintenancePage() {
     null,
   );
   const [keepExistingReceiptPath, setKeepExistingReceiptPath] = useState<string | null>(null);
+  const [visitNotes, setVisitNotes] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +71,7 @@ export default function AddMaintenancePage() {
     setMileage(existing.mileage);
     setCenterId(existing.service_center_id);
     setKeepExistingReceiptPath(existing.receipt_image_path);
+    setVisitNotes(existing.notes ?? '');
     const next = emptyRows();
     for (const it of existing.items) {
       if (!isCategoryCode(it.category_code)) continue;
@@ -116,6 +118,9 @@ export default function AddMaintenancePage() {
     setSaving(true);
     setError(null);
     try {
+      // visitNotes is always defined (empty string means "no note" — the
+      // repository normalises empty → null so the user can clear notes
+      // when editing).
       if (editing && visitId) {
         await updateVisit(userId, visitId, {
           vehicleId: vehicle.id,
@@ -123,6 +128,7 @@ export default function AddMaintenancePage() {
           mileage,
           serviceCenterId: centerId,
           items: allItems,
+          notes: visitNotes,
           receiptBlob: receipt?.blob ?? null,
           receiptMime: receipt?.mime ?? null,
         });
@@ -133,6 +139,7 @@ export default function AddMaintenancePage() {
           mileage,
           serviceCenterId: centerId,
           items: allItems,
+          notes: visitNotes,
           receiptBlob: receipt?.blob ?? null,
           receiptMime: receipt?.mime ?? null,
         });
@@ -246,6 +253,19 @@ export default function AddMaintenancePage() {
             onChange={(next) => setRows((s) => ({ ...s, [c.code]: next }))}
           />
         ))}
+
+        {/* Visit-level note — shown above the sticky "รวมทั้งหมด" bar.
+            Surfaces on dashboard recent list and history maintenance cards. */}
+        <label className="block rounded-card bg-card p-3">
+          <span className="mb-2 block text-sm font-semibold text-ink">หมายเหตุ</span>
+          <textarea
+            value={visitNotes}
+            onChange={(e) => setVisitNotes(e.target.value)}
+            rows={3}
+            placeholder="เช่น เปลี่ยนเพราะมีเสียงดัง, ใช้รับประกัน, อื่นๆ..."
+            className="w-full resize-none rounded-tile bg-brandSoft px-3 py-2 text-sm text-ink outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
+          />
+        </label>
 
         {error && (
           <div className="rounded-tile bg-rose-100 p-2 text-xs text-rose-900">{error}</div>

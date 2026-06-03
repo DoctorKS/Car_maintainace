@@ -106,7 +106,7 @@ export async function insertVisit(
     mileage: draft.mileage,
     service_center_id: draft.serviceCenterId,
     receipt_image_path: receiptPath,
-    notes: draft.notes ?? null,
+    notes: draft.notes?.trim() ? draft.notes.trim() : null,
     created_at: created,
     updated_at: created,
   };
@@ -185,7 +185,14 @@ export async function updateVisit(
     mileage: draft.mileage,
     service_center_id: draft.serviceCenterId,
     receipt_image_path: receiptPath,
-    notes: draft.notes ?? existing.notes,
+    // Empty / whitespace clears the note (sets null). Undefined means the
+    // form didn't supply notes — keep whatever was there.
+    notes:
+      draft.notes !== undefined
+        ? draft.notes.trim()
+          ? draft.notes.trim()
+          : null
+        : existing.notes,
     updated_at,
   };
 
