@@ -11,10 +11,11 @@ interface Props {
  * Mapping (code → original file in /Button/):
  *   1 → fluid.png        (Fluids & Lubricants)
  *   2 → filter.png       (Filters & Emission System)
- *   3 → electric.png     (Engine & Electrical)
+ *   3 → electric.png     (Diesel-specific Engine & Electrical)
  *   4 → Gears.png        (Chassis, Brakes & Tires)
  *   5 → Consumables.png  (General Consumables)
- *   6 → other.png        (Others)
+ *   6 → Engine.png       (เครื่องยนต์ — added with migration 0004)
+ *   7 → other.png        (Others — demoted from code 6 by 0004)
  */
 export default function CategoryIcon({ code, className }: Props) {
   return (

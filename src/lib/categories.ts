@@ -1,15 +1,21 @@
 /**
- * The 6 maintenance categories from Maintainance_pattern.txt.
+ * The 7 maintenance categories.
+ *
+ * The original `Maintainance_pattern.txt` (in repo root) ships 6 categories
+ * with "อื่นๆ" at code 6. Migration `0004_add_engine_category.sql` inserts
+ * a new "เครื่องยนต์" at code 6 and bumps the original "อื่นๆ" to code 7
+ * (so existing rows that used code 6 are server-side migrated to 7 to
+ * preserve semantics).
  *
  * Each category has:
- *   - code (1..6) used in DB rows
+ *   - code (1..7) used in DB rows
  *   - title (Thai + English) for headers
  *   - icon emoji (used in compact labels)
  *   - seedParts: factory-supplied default options for the dropdown.
  *     User-added "+ อื่นๆ" entries are merged in at runtime from `custom_parts`.
  */
 
-export type CategoryCode = 1 | 2 | 3 | 4 | 5 | 6;
+export type CategoryCode = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export interface Category {
   code: CategoryCode;
@@ -90,6 +96,21 @@ export const CATEGORIES: readonly Category[] = [
   },
   {
     code: 6,
+    emoji: '🔧',
+    titleTh: 'เครื่องยนต์',
+    titleEn: 'Engine',
+    seedParts: [
+      'หัวเทียน (Spark Plugs)',
+      'ยางแท่นเครื่อง (Engine Mounts)',
+      'ปั๊มน้ำ (Water Pump)',
+      'ปะเก็นฝาสูบ (Cylinder Head Gasket)',
+      'ฝาวาล์ว / ปะเก็นฝาวาล์ว (Valve Cover Gasket)',
+      'ทำความสะอาดหัวฉีด (Injector Cleaning)',
+      'ยกเครื่อง / Overhaul',
+    ],
+  },
+  {
+    code: 7,
     emoji: '📦',
     titleTh: 'อื่นๆ',
     titleEn: 'Others',
@@ -106,4 +127,4 @@ export const getCategory = (code: CategoryCode): Category => {
 };
 
 export const isCategoryCode = (n: number): n is CategoryCode =>
-  Number.isInteger(n) && n >= 1 && n <= 6;
+  Number.isInteger(n) && n >= 1 && n <= 7;

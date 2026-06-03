@@ -181,16 +181,17 @@ erDiagram
     }
 ```
 
-**Category codes** (per `Maintainance_pattern.txt`):
+**Category codes** (extended past `Maintainance_pattern.txt` by migration 0004):
 
 | Code | Title (Thai) | English |
 |---|---|---|
 | 1 | ของเหลวและสารหล่อลื่น | Fluids & Lubricants |
 | 2 | ระบบไอดี ไอเสีย และไส้กรอง | Filters & Emission System |
-| 3 | ระบบไฟและชิ้นส่วนเฉพาะเครื่องยนต์ดีเซล | Engine & Electrical |
+| 3 | ระบบไฟและชิ้นส่วนเฉพาะเครื่องดีเซล | Engine & Electrical |
 | 4 | ช่วงล่าง เบรก และยาง | Chassis, Brakes & Tires |
 | 5 | ชิ้นส่วนสิ้นเปลือง | General Consumables |
-| 6 | อื่นๆ | Others |
+| 6 | เครื่องยนต์ | Engine *(added by 0004)* |
+| 7 | อื่นๆ | Others *(demoted from code 6 by 0004)* |
 
 Defined in [`src/lib/categories.ts`](src/lib/categories.ts) with seed `partName`
 options for each dropdown. User-added parts persist in `custom_parts` and merge
@@ -402,8 +403,9 @@ src/
 supabase/
   migrations/
     0001_init.sql                 Tables + RLS + new-user trigger + storage bucket
-    0002_item_notes.sql           Adds maintenance_items.notes  (run on project!)
-    0003_visit_scheduled.sql      Adds maintenance_visits.is_scheduled  (run too)
+    0002_item_notes.sql           Adds maintenance_items.notes
+    0003_visit_scheduled.sql      Adds maintenance_visits.is_scheduled
+    0004_add_engine_category.sql  category 6 = เครื่องยนต์; renumber อื่นๆ → 7
 ```
 
 ---
@@ -428,11 +430,16 @@ cp .env.example .env.local         # fill in VITE_SUPABASE_URL + VITE_SUPABASE_A
      — adds `maintenance_items.notes`.
    - [`supabase/migrations/0003_visit_scheduled.sql`](supabase/migrations/0003_visit_scheduled.sql)
      — adds `maintenance_visits.is_scheduled` ("เช็คระยะ" flag).
+   - [`supabase/migrations/0004_add_engine_category.sql`](supabase/migrations/0004_add_engine_category.sql)
+     — adds category 6 = "เครื่องยนต์" (Engine), demotes "อื่นๆ" to code 7,
+     and renumbers existing code-6 rows.
 
    The client self-heals if 0002 / 0003 aren't applied (schema-probe + flush
-   strip the unknown columns so the rest of each row still syncs), but
-   the per-item `notes` and the `เช็คระยะ` checkbox state are silently
-   dropped until the migration runs.
+   strip the unknown columns), but the per-item `notes` and the `เช็คระยะ`
+   checkbox state are silently dropped until those migrations run. **0004
+   must be applied before the client that contains the engine category
+   goes live** — the new code 6 means Engine, the old DB constraint still
+   thinks code 6 means Others.
 4. Authentication → Providers → enable **Email**.
 
 Or via [Supabase CLI](https://supabase.com/docs/guides/cli):

@@ -88,6 +88,36 @@ class AppDB extends Dexie {
       dead_letters:       '++id, entity, dead_lettered_at',
       meta:               '&key',
     });
+    // v3: renumber existing "อื่นๆ" rows from code 6 → 7 in maintenance_items
+    // and custom_parts so the new code 6 = "เครื่องยนต์" doesn't collide
+    // with previously-saved data. Mirrors migration 0004_add_engine_category.sql.
+    this.version(3)
+      .stores({
+        // No index changes — same as v2.
+        vehicles:           '&id, user_id, _dirty',
+        service_centers:    '&id, user_id, name, _dirty',
+        maintenance_visits: '&id, &local_uuid, user_id, service_date, vehicle_id, _dirty',
+        maintenance_items:  '&id, &local_uuid, user_id, visit_id, category_code, part_name, _dirty',
+        custom_parts:       '&id, user_id, [user_id+category_code+part_name], _dirty',
+        pending_mutations:  '++id, entity, created_at',
+        pending_uploads:    '++id, visit_id, created_at',
+        dead_letters:       '++id, entity, dead_lettered_at',
+        meta:               '&key',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('maintenance_items')
+          .toCollection()
+          .modify((it: { category_code?: number }) => {
+            if (it.category_code === 6) it.category_code = 7;
+          });
+        await tx
+          .table('custom_parts')
+          .toCollection()
+          .modify((cp: { category_code?: number }) => {
+            if (cp.category_code === 6) cp.category_code = 7;
+          });
+      });
   }
 }
 

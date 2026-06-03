@@ -22,6 +22,7 @@ const emptyRows = (): Record<CategoryCode, DraftItem[]> => ({
   4: [],
   5: [],
   6: [],
+  7: [],
 });
 
 /**

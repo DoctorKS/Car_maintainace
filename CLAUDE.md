@@ -88,6 +88,7 @@ by-part timeline) via `useLiveQuery`.
 | Supabase schema + RLS + new-user trigger | [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) |
 | Item-level `notes` column | [`supabase/migrations/0002_item_notes.sql`](supabase/migrations/0002_item_notes.sql) **— must be run on the project** |
 | Visit-level `is_scheduled` column | [`supabase/migrations/0003_visit_scheduled.sql`](supabase/migrations/0003_visit_scheduled.sql) **— must be run on the project** |
+| Category 6 = "เครื่องยนต์", code 7 = "อื่นๆ" | [`supabase/migrations/0004_add_engine_category.sql`](supabase/migrations/0004_add_engine_category.sql) **— must be run BEFORE the new client lands**, otherwise existing "อื่นๆ" rows (server code=6) start displaying as Engine on devices that already ran Dexie v3 |
 | Pages | [`src/pages/`](src/pages/) — `LoginPage`, `DashboardPage`, `AddMaintenancePage`, `HistoryCalendarPage`, `ByPartIndexPage`, `ByPartPage` |
 | Category icons (PNG) | `public/icons/categories/cat-1.png` … `cat-6.png` (compressed from `/Button/*.png`, 10–56 KB each) |
 
@@ -147,7 +148,7 @@ npm run format        # prettier --write src/**/*
 
 ## Known gotchas
 
-- **Migrations `0002` and `0003` must be applied to the live Supabase project.** Without them, `maintenance_items` inserts silently lose `notes` (column missing → flush strips it) and `maintenance_visits` inserts silently lose `is_scheduled`. The user sees the data on the device (Dexie still has it) but the corresponding fields are null on the server.
+- **Migrations `0002`, `0003`, `0004` must be applied to the live Supabase project.** Without 0002 / 0003 the optional `notes` / `is_scheduled` fields are silently dropped on the server (the schema probe handles the strip). Without 0004 the new client will write `category_code = 6` meaning "เครื่องยนต์" into a DB where the constraint still says 1..6 with `6 = อื่นๆ` — server rejects the insert if any existing rows haven't been renumbered (or worse, succeeds and stores semantically-wrong data). **0004 must run before the client bundle that contains the engine category goes live.** Dexie v3 upgrade hook handles the renumber on each device the first time the new code boots.
 - **FBX mesh names** — `useCarModel.ts` maps textures by mesh-name substring. If the FBX is replaced, run the inspection snippet in [`src/three/inspect-fbx.md`](src/three/inspect-fbx.md).
 - **`navigator.onLine` lies** on iOS. The flush loop retries on `online`, `visibilitychange→visible`, and `focus`.
 - **Tailwind v4 is not yet used.** Stay on v3.4.
