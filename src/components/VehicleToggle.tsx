@@ -5,15 +5,14 @@ import { useSession } from '@/lib/supabase/session';
 /**
  * Pill-shaped vehicle switcher styled like a hardware toggle.
  *
- * The label inside the moving knob is a single letter — "M" when Mazda is
- * active, "T" when Tesla is active — and tapping the pill cycles to the
- * next vehicle in the user's list (currently always 1 ↔ 2). The brand
- * marks themselves stay text-only on purpose so the component is
- * self-contained and we don't ship logo art in the bundle.
+ * The moving knob carries a small PNG mark for the active vehicle —
+ * Mazda or Tesla — pulled from `public/icons/vehicles/{mazda,tesla}.png`
+ * (user-supplied art; the toggle just routes the file). The track tint
+ * follows the active brand palette via the `body[data-vehicle-make]`
+ * CSS-variable swap, so the pill turns Mazda blue or Tesla red without
+ * any inline JS.
  *
- * Track tint follows the active brand colour via the
- * `body[data-vehicle-make]` token swap — so the pill turns Mazda blue or
- * Tesla red without any inline JS.
+ * Tap cycles to the next vehicle in the user's list.
  */
 export default function VehicleToggle() {
   const session = useSession();
@@ -26,7 +25,7 @@ export default function VehicleToggle() {
 
   const make = vehicleMake(active);
   const isTesla = make === 'tesla';
-  const letter = isTesla ? 'T' : 'M';
+  const iconSrc = isTesla ? '/icons/vehicles/tesla.png' : '/icons/vehicles/mazda.png';
 
   const cycle = () => {
     const idx = vehicles.findIndex((v) => v.id === active.id);
@@ -43,11 +42,18 @@ export default function VehicleToggle() {
       className="relative inline-flex h-11 w-20 items-center rounded-full bg-brandSoft ring-1 ring-white/70 transition-colors active:scale-95"
     >
       <span
-        className={`flex h-9 w-9 items-center justify-center rounded-full bg-white text-base font-bold text-brand shadow-sm transition-transform ${
+        className={`flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-sm transition-transform ${
           isTesla ? 'translate-x-[44px]' : 'translate-x-1'
         }`}
       >
-        {letter}
+        <img
+          src={iconSrc}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          className="h-6 w-6 object-contain"
+        />
       </span>
     </button>
   );

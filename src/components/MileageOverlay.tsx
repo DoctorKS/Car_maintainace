@@ -34,7 +34,7 @@ export default function MileageOverlay({ vehicleId, mileage }: Props) {
   };
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 max-w-[48%] text-right">
+    <div className="pointer-events-auto absolute right-3 top-3 z-20 max-w-[48%] text-right">
       <div className="text-[10px] uppercase tracking-wider text-sub">เลขไมล์</div>
       {editing ? (
         <input

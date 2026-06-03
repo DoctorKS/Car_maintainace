@@ -81,18 +81,21 @@ export default function DashboardPage() {
           </Suspense>
         )}
 
-        {/* Top-LEFT: vehicle toggle */}
-        <div className="absolute left-3 top-3">
+        {/* Top-LEFT: vehicle toggle. z-20 lifts it above CarViewer's
+            <Canvas className="relative z-10">, otherwise the canvas +
+            OrbitControls swallow the click. */}
+        <div className="absolute left-3 top-3 z-20">
           <VehicleToggle />
         </div>
 
-        {/* Top-RIGHT: editable mileage */}
+        {/* Top-RIGHT: editable mileage. MileageOverlay carries its own
+            `absolute right-3 top-3 z-20` so no wrapper is needed here. */}
         {vehicle && <MileageOverlay vehicleId={vehicle.id} mileage={vehicle.mileage} />}
 
         {/* Bottom-LEFT chip: model + year + plate (Mazda only; Tesla card
             already shows this prominently) */}
         {vehicle && !isTesla && (
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-ink backdrop-blur">
+          <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-ink backdrop-blur">
             {displayModel} {vehicle.year} · {vehicle.plate}
           </div>
         )}
