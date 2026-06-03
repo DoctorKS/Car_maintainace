@@ -59,10 +59,6 @@ export default function HistoryCalendarPage() {
         <div className="w-12" />
       </div>
 
-      <div className="mb-2 text-center text-[11px] text-white/70">
-        {formatThaiMonthYear(month)}
-      </div>
-
       <div className="mb-3">
         <CalendarGrid
           month={month}
@@ -74,18 +70,10 @@ export default function HistoryCalendarPage() {
         />
       </div>
 
-      <div className="space-y-3">
-        {visitsForDay.length === 0 ? (
-          <div className="rounded-card bg-card p-6 text-center text-xs text-sub">
-            ไม่มีบันทึกในวันนี้
-          </div>
-        ) : (
-          visitsForDay.map((v) => <MaintenanceCard key={v.id} visit={v} />)
-        )}
-      </div>
-
-      {/* Bottom-of-page monthly summary — totals for the displayed month. */}
-      <div className="mt-4 rounded-card bg-card p-4">
+      {/* Monthly summary — sits between the calendar and the day's cards
+          per spec ("ย้ายหมายเหตุ card ลงมาด้านล่างต่อสรุปค่าใช้จ่าย" =
+          the visit/notes cards now follow the summary). */}
+      <div className="mb-3 rounded-card bg-card p-4">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-sm font-semibold text-ink">
             สรุปค่าใช้จ่าย {formatThaiMonthYear(month)}
@@ -113,6 +101,17 @@ export default function HistoryCalendarPage() {
               </span>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Day's visit cards (each card carries its own หมายเหตุ pill). */}
+      <div className="space-y-3">
+        {visitsForDay.length === 0 ? (
+          <div className="rounded-card bg-card p-6 text-center text-xs text-sub">
+            ไม่มีบันทึกในวันนี้
+          </div>
+        ) : (
+          visitsForDay.map((v) => <MaintenanceCard key={v.id} visit={v} />)
         )}
       </div>
     </AppShell>
