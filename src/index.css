@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Self-hosted fonts
+   ============================================================ */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/Inter-Variable.woff2') format('woff2-variations');
+}
+
+/* IBM Plex Sans Thai — restricted to Thai unicode range so Latin glyphs
+   still use Inter (the consistent "Universal Sans-like" mixed look). */
+@font-face {
+  font-family: 'IBM Plex Sans Thai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IBMPlexSansThai-Regular.woff2') format('woff2');
+  unicode-range: U+0E00-0E7F;
+}
+@font-face {
+  font-family: 'IBM Plex Sans Thai';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/IBMPlexSansThai-Medium.woff2') format('woff2');
+  unicode-range: U+0E00-0E7F;
+}
+@font-face {
+  font-family: 'IBM Plex Sans Thai';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/IBMPlexSansThai-SemiBold.woff2') format('woff2');
+  unicode-range: U+0E00-0E7F;
+}
+
+/* ============================================================
+   Base + iOS PWA tweaks
+   ============================================================ */
+html, body, #root {
+  height: 100%;
+}
+body {
+  @apply bg-primary-900 text-white font-sans antialiased;
+  /* Block iOS rubber-band overflow on the whole page */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Hide spinners on number inputs */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* Tap target sizes */
+button, select, input {
+  font-family: inherit;
+}
