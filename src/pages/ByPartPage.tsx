@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import AppShell from '@/components/AppShell';
 import CategoryIcon from '@/components/CategoryIcon';
 import { useSession } from '@/lib/supabase/session';
+import { useActiveVehicle } from '@/hooks/useVehicle';
 import { useByPart } from '@/hooks/useByPart';
 import { getCategory, isCategoryCode } from '@/lib/categories';
 import { useUiStore } from '@/store/ui';
@@ -12,6 +13,7 @@ const baht = (n: number) => n.toLocaleString('th-TH');
 export default function ByPartPage() {
   const session = useSession();
   const userId = session?.user.id;
+  const vehicle = useActiveVehicle(userId);
   const { code: rawCode } = useParams<{ code: string }>();
   const code = Number(rawCode);
   const expanded = useUiStore((s) => s.expandedParts);
@@ -28,7 +30,7 @@ export default function ByPartPage() {
   const cat = getCategory(code);
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const groups = useByPart(userId, code);
+  const groups = useByPart(userId, vehicle?.id ?? null, code);
 
   return (
     <AppShell>

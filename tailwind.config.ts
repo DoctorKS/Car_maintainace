@@ -1,23 +1,29 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Car Maintenance Tracker — design tokens
- * โทนฟ้าสด / การ์ดขาว (CARFAX-style)
+ * Car Maintenance Tracker — design tokens.
  *
- * Source of truth: handoff/tailwind.config.ts
+ * The `brand` family is driven by CSS variables so we can swap the whole
+ * palette by setting a single body data-attribute. See `src/index.css`:
+ *
+ *   body                                → Mazda (blue, default)
+ *   body[data-vehicle-make="tesla"]     → Tesla (red)
+ *
+ * Other tokens (ink / sub / line / pink / card) stay static — they're
+ * vehicle-agnostic.
  */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        brand: '#1668CC', // primary blue — พื้นหลังหน้า
-        brandDeep: '#0F55AD', // เงา/ความลึก
-        brandSoft: '#EAF1FC', // พื้นไอคอน / inner surface
-        line: '#DBE7F8', // เส้นขอบ / วันเดือนอื่น
-        ink: '#13294D', // หัวข้อบนการ์ดขาว
-        sub: '#7186A3', // ข้อความรอง
-        pink: '#EC4D8E', // จุด record / ไฮไลต์เล็ก
+        brand: 'rgb(var(--brand-rgb) / <alpha-value>)',
+        brandDeep: 'rgb(var(--brand-deep-rgb) / <alpha-value>)',
+        brandSoft: 'rgb(var(--brand-soft-rgb) / <alpha-value>)',
+        line: '#DBE7F8',
+        ink: '#13294D',
+        sub: '#7186A3',
+        pink: '#EC4D8E',
         card: '#FFFFFF',
       },
       fontFamily: {
@@ -29,12 +35,12 @@ export default {
         hero: '26px',
       },
       boxShadow: {
-        // Cards now sit flat on the blue background — no glow halo.
+        // Cards now sit flat on the brand background — no glow halo.
         card: 'none',
         soft: 'none',
-        // Keep the calendar "today" pill highlight (it's a brand-blue glow,
-        // not a white one, and signals the selected day).
-        today: '0 6px 14px rgba(22,104,204,.4)',
+        // Keep the calendar "today" pill highlight (a brand-tinted glow, not
+        // a white one, and it signals the selected day).
+        today: '0 6px 14px rgb(var(--brand-rgb) / 0.4)',
       },
       spacing: {
         'safe-t': 'env(safe-area-inset-top)',

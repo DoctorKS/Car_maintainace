@@ -18,26 +18,36 @@ export interface PartGroup {
 }
 
 interface ItemWithVisit extends MaintenanceItemRow {
-  visit?: Pick<MaintenanceVisitRow, 'id' | 'service_date'> | null;
+  visit?: Pick<MaintenanceVisitRow, 'id' | 'service_date' | 'vehicle_id'> | null;
 }
 
-/** Group items by part_name within a single category, newest entry first. */
+/**
+ * Group items by `part_name` within a single category, newest entry first.
+ *
+ * When `vehicleId` is supplied (the dashboard's active toggle) only items
+ * whose embedded visit belongs to that vehicle are kept. The filter is
+ * applied client-side because PostgREST embeds don't support a top-level
+ * filter through the join.
+ */
 export function useByPart(
   userId: string | undefined,
+  vehicleId: string | null | undefined,
   categoryCode: CategoryCode,
 ): PartGroup[] {
   const { data } = useQuery({
-    queryKey: ['by-part', userId, categoryCode],
+    queryKey: ['by-part', userId, vehicleId ?? null, categoryCode],
     queryFn: async (): Promise<PartGroup[]> => {
       if (!userId) return [];
       const { data, error } = await supabase
         .from('maintenance_items')
-        .select('*, visit:maintenance_visits(id, service_date)')
+        .select('*, visit:maintenance_visits(id, service_date, vehicle_id)')
         .eq('user_id', userId)
         .eq('category_code', categoryCode);
       if (error) throw error;
 
-      const rows = (data ?? []) as ItemWithVisit[];
+      const rows = ((data ?? []) as ItemWithVisit[]).filter(
+        (it) => it.visit && (!vehicleId || it.visit.vehicle_id === vehicleId),
+      );
       const groups = new Map<string, PartGroup>();
       for (const it of rows) {
         if (!it.visit) continue;

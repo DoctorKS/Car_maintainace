@@ -4,20 +4,24 @@ import MaintenanceCard from './MaintenanceCard';
 
 interface Props {
   userId: string | undefined;
+  vehicleId: string | null | undefined;
   pageSize?: number;
 }
 
 /**
- * Paged list of maintenance visits — newest first.
- * Bottom-right "next" pill wraps back to page 0 at the end.
+ * Paged list of maintenance visits — newest first, scoped to the active
+ * vehicle. Bottom-right "next" pill wraps back to page 0 at the end.
  */
-export default function MaintenanceCardList({ userId, pageSize = 5 }: Props) {
+export default function MaintenanceCardList({ userId, vehicleId, pageSize = 5 }: Props) {
   const page = useUiStore((s) => s.dashboardPage);
   const nextPage = useUiStore((s) => s.nextDashboardPage);
   const reset = useUiStore((s) => s.resetDashboardPage);
 
-  const total = useVisitCount(userId);
-  const visits = useMaintenanceVisits(userId, { limit: pageSize, offset: page * pageSize });
+  const total = useVisitCount(userId, vehicleId);
+  const visits = useMaintenanceVisits(userId, vehicleId, {
+    limit: pageSize,
+    offset: page * pageSize,
+  });
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const hasNext = page < totalPages - 1;

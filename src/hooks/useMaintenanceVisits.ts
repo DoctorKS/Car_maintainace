@@ -8,12 +8,12 @@ import type {
 import type { MaintenanceVisitWithItems } from '@/types/domain';
 
 /**
- * Server-direct visit hooks. Replaces the Dexie + useLiveQuery layer.
+ * Server-direct visit hooks. All reads scope by `userId` (so RLS works) and
+ * `vehicleId` when provided, so the dashboard's vehicle toggle filters
+ * lists / counts / timelines automatically.
  *
- * Mutations in `src/lib/api.ts` must call
- * `queryClient.invalidateQueries({ queryKey: ['visits', userId] })`
- * (and ['vehicle', userId] for mileage edits, etc.) so the UI refreshes
- * after a save / delete.
+ * Mutations in `src/lib/api.ts` should invalidate the matching query keys
+ * (see VISITS_QK helper) after a save / delete.
  */
 
 interface VisitWithEmbed extends MaintenanceVisitRow {
@@ -36,16 +36,19 @@ interface Page {
   offset?: number;
 }
 
-export const VISITS_QK = (userId: string | undefined) => ['visits', userId];
+/** Query-key root for "all of a user's visits, optionally scoped to a vehicle". */
+export const VISITS_QK = (userId: string | undefined, vehicleId?: string | null) =>
+  ['visits', userId, vehicleId ?? null];
 
 /** Paginated visit list, newest first. */
 export function useMaintenanceVisits(
   userId: string | undefined,
+  vehicleId: string | null | undefined,
   options: Page = {},
 ): MaintenanceVisitWithItems[] {
   const { limit, offset = 0 } = options;
   const { data } = useQuery({
-    queryKey: ['visits', userId, 'page', limit ?? 'all', offset],
+    queryKey: ['visits', userId, vehicleId ?? null, 'page', limit ?? 'all', offset],
     queryFn: async (): Promise<MaintenanceVisitWithItems[]> => {
       if (!userId) return [];
       let query = supabase
@@ -53,6 +56,7 @@ export function useMaintenanceVisits(
         .select('*, service_center:service_centers(*), items:maintenance_items(*)')
         .eq('user_id', userId)
         .order('service_date', { ascending: false });
+      if (vehicleId) query = query.eq('vehicle_id', vehicleId);
       if (limit !== undefined) query = query.range(offset, offset + limit - 1);
       else if (offset > 0) query = query.range(offset, offset + 999);
       const { data, error } = await query;
@@ -91,20 +95,23 @@ export function useVisitWithItems(
 /** Visits whose service_date falls in [fromIso, toIso] inclusive. */
 export function useVisitsInRange(
   userId: string | undefined,
+  vehicleId: string | null | undefined,
   fromIso: string,
   toIso: string,
 ): MaintenanceVisitWithItems[] {
   const { data } = useQuery({
-    queryKey: ['visits', userId, 'range', fromIso, toIso],
+    queryKey: ['visits', userId, vehicleId ?? null, 'range', fromIso, toIso],
     queryFn: async (): Promise<MaintenanceVisitWithItems[]> => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      let query = supabase
         .from('maintenance_visits')
         .select('*, service_center:service_centers(*), items:maintenance_items(*)')
         .eq('user_id', userId)
         .gte('service_date', fromIso)
         .lte('service_date', toIso)
         .order('service_date', { ascending: false });
+      if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+      const { data, error } = await query;
       if (error) throw error;
       return (data as unknown as VisitWithEmbed[]).map(hydrateRow);
     },
@@ -114,22 +121,25 @@ export function useVisitsInRange(
   return data ?? [];
 }
 
-/** Just the set of dates with at least one visit in [from, to]. */
+/** Set of dates with at least one visit in [from, to] for this vehicle. */
 export function useVisitDateSet(
   userId: string | undefined,
+  vehicleId: string | null | undefined,
   fromIso: string,
   toIso: string,
 ): Set<string> {
   const { data } = useQuery({
-    queryKey: ['visit-dates', userId, fromIso, toIso],
+    queryKey: ['visit-dates', userId, vehicleId ?? null, fromIso, toIso],
     queryFn: async (): Promise<Set<string>> => {
       if (!userId) return new Set<string>();
-      const { data, error } = await supabase
+      let query = supabase
         .from('maintenance_visits')
         .select('service_date')
         .eq('user_id', userId)
         .gte('service_date', fromIso)
         .lte('service_date', toIso);
+      if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+      const { data, error } = await query;
       if (error) throw error;
       const out = new Set<string>();
       for (const r of data as { service_date: string }[]) out.add(r.service_date);
@@ -141,15 +151,20 @@ export function useVisitDateSet(
   return data ?? new Set<string>();
 }
 
-export function useVisitCount(userId: string | undefined): number {
+export function useVisitCount(
+  userId: string | undefined,
+  vehicleId: string | null | undefined,
+): number {
   const { data } = useQuery({
-    queryKey: ['visit-count', userId],
+    queryKey: ['visit-count', userId, vehicleId ?? null],
     queryFn: async (): Promise<number> => {
       if (!userId) return 0;
-      const { count, error } = await supabase
+      let query = supabase
         .from('maintenance_visits')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
+      if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+      const { count, error } = await query;
       if (error) throw error;
       return count ?? 0;
     },

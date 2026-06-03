@@ -5,6 +5,7 @@ import CalendarGrid from '@/components/CalendarGrid';
 import MaintenanceCard from '@/components/MaintenanceCard';
 import { useSession } from '@/lib/supabase/session';
 import { useUiStore } from '@/store/ui';
+import { useActiveVehicle } from '@/hooks/useVehicle';
 import { useVisitDateSet, useVisitsInRange } from '@/hooks/useMaintenanceVisits';
 import {
   formatThaiMonthYear,
@@ -20,6 +21,8 @@ const baht = (n: number) =>
 export default function HistoryCalendarPage() {
   const session = useSession();
   const userId = session?.user.id;
+  const vehicle = useActiveVehicle(userId);
+  const vehicleId = vehicle?.id ?? null;
   const month = useUiStore((s) => s.historyMonth);
   const setMonth = useUiStore((s) => s.setHistoryMonth);
   const [selected, setSelected] = useState<Date>(new Date());
@@ -31,11 +34,12 @@ export default function HistoryCalendarPage() {
   }, [month]);
 
   // Days in this month that have ≥1 visit (red-dot lookup for the grid).
-  const markedIso = useVisitDateSet(userId, monthBounds.fromIso, monthBounds.toIso);
+  const markedIso = useVisitDateSet(userId, vehicleId, monthBounds.fromIso, monthBounds.toIso);
 
   // Every visit in the displayed month — used for the bottom summary card.
   const visitsThisMonth = useVisitsInRange(
     userId,
+    vehicleId,
     monthBounds.fromIso,
     monthBounds.toIso,
   );
