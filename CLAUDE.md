@@ -79,7 +79,8 @@ history before `df2703b` to see what was removed.
 | Vehicle / centers / custom parts / by-part / receipt URL | [`src/hooks/`](src/hooks/) |
 | Supabase client + session hook | [`src/lib/supabase/`](src/lib/supabase/) |
 | VAT 7% helper (display-only) | [`src/lib/vat.ts`](src/lib/vat.ts) — `vatOf`, `withVat`, `breakdown` |
-| 6 categories + seed parts | [`src/lib/categories.ts`](src/lib/categories.ts) |
+| 7 categories + seed parts (engine added by 0004) | [`src/lib/categories.ts`](src/lib/categories.ts) |
+| DevToolsDock (bottom-left ⬆ ↻ 🩺) + drift hook | [`src/components/DevToolsDock.tsx`](src/components/DevToolsDock.tsx), [`src/hooks/useDriftStatus.ts`](src/hooks/useDriftStatus.ts) |
 | Buddhist Era / Thai formatters (+ tests) | [`src/lib/thai-date/index.ts`](src/lib/thai-date/index.ts), [`index.test.ts`](src/lib/thai-date/index.test.ts) — 24 tests |
 | 3D viewer (lazy-loaded) | [`src/three/CarViewer.tsx`](src/three/CarViewer.tsx), [`useCarModel.ts`](src/three/useCarModel.ts) |
 | Receipt OCR (Claude vision via Edge Function) | [`src/lib/ocr.ts`](src/lib/ocr.ts), [`src/components/OcrReview.tsx`](src/components/OcrReview.tsx), [`supabase/functions/ocr-receipt/index.ts`](supabase/functions/ocr-receipt/index.ts) |
@@ -96,6 +97,7 @@ history before `df2703b` to see what was removed.
 - **Optimistic UI is opt-in.** Default is "save → invalidate → wait for refetch → render fresh data". For surfaces that need instant feedback (e.g. mileage edit), wrap the mutation in `useMutation` with `onMutate` rolling back on error. None of the current callers do this yet — they all rely on the post-save invalidate.
 - **VAT 7%** is a **display-time transform**. DB stores `total_price` pre-VAT. Pipe through `breakdown(subtotal)` from `src/lib/vat.ts` so the three numbers stay consistent.
 - **3D viewer is `React.lazy`** — keep it that way.
+- **DevToolsDock** is the only on-screen sync surface (no banner, no gear). Its three buttons hit React Query / the service worker / Supabase counts respectively — none of them touch a local queue (there is no local queue). Don't add a second dock or a banner; extend the existing dock if you need a new control.
 
 ## Commands
 

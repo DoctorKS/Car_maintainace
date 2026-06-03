@@ -3,7 +3,9 @@
 > Personal mobile-first web app (installable on iPhone via PWA) for tracking
 > maintenance visits on a **Mazda CX-5 2016 ทะเบียน ขข4699**.
 > Thai + English UI, dates in **พุทธศักราช (พ.ศ.)**, Supabase backend with
-> row-level security per user, and a full offline-first sync queue.
+> row-level security per user, **server-direct architecture** (no local
+> mirror), receipt **OCR via a Supabase Edge Function calling Claude vision**,
+> and a small 3D viewer of the car on the dashboard.
 
 ---
 
@@ -17,7 +19,9 @@
 6. [Setup](#setup)
 7. [Install on iPhone](#install-on-iphone)
 8. [Verification](#verification)
-9. [Open items](#open-items)
+9. [DevTools dock](#devtools-dock)
+10. [Recent additions](#recent-additions)
+11. [Open items](#open-items)
 
 ---
 
@@ -30,41 +34,46 @@
 | Language | **TypeScript 5** strict | Fewer footguns; `noUnusedLocals` on |
 | CSS | **Tailwind v3.4** | Stable; v4 ecosystem still fresh |
 | Routing | **react-router-dom v6** | SPA routes + auth guard |
-| Server data | **@supabase/supabase-js v2** + **@tanstack/react-query v5** | RQ caches reads; mutations go through `repository.ts` |
-| Offline cache | **Dexie v4** + `dexie-react-hooks` | Local mirror of every row, `useLiveQuery` for reads |
+| Server data | **@supabase/supabase-js v2** + **@tanstack/react-query v5** | RQ caches every read; mutations in `src/lib/api.ts` call `supabase.from(...)` directly and `invalidateQueries` after |
 | UI state | **Zustand v5** | History month, dashboard page, expanded-part set |
 | 3D | **three v0.169** + **@react-three/fiber v8** + **@react-three/drei v9** | `useLoader(FBXLoader)`, `<ContactShadows />`, `<OrbitControls />` |
-| Forms | **react-hook-form v7** + **zod v3** | Set up but kept light — `useState` is enough for the small Add form |
 | Dates | **date-fns v4** + custom Thai/BE adapter (`src/lib/thai-date`) | No third-party BE locale; we write a tiny wrapper |
 | Image upload | native `<input capture="environment">` + **browser-image-compression** | iOS-friendly; no react-dropzone needed for mobile |
+| Receipt OCR | **Supabase Edge Function** → **Anthropic Claude `claude-sonnet-4-6` vision** | API key stays in Supabase secrets; browser never sees it |
 | PWA | **vite-plugin-pwa v0.20** (Workbox, `autoUpdate`) | Auto manifest + SW + runtime caching |
 | Tests | **Vitest v2** + `@testing-library/react` + `jsdom` | Same engine as Vite |
 
-**Fonts (self-hosted)** — Inter Variable (Latin) + IBM Plex Sans Thai (Thai, `unicode-range U+0E00-0E7F`). Substitute for Universal Sans; swap the woff2 files later if a licensed Universal Sans build arrives.
+**Fonts (self-hosted)** — Inter Variable (Latin) + IBM Plex Sans Thai (Thai, `unicode-range U+0E00-0E7F`).
+
+**Removed from earlier iterations** — Dexie + `dexie-react-hooks` + the whole `src/lib/sync/` offline-first stack (pending-mutations queue, flush loop, delta pull, dead-letters, schema probe, dedupe sweep). See [BUGS.md entry "dexie-sync-removed-radical-fix"](BUGS.md) for the why.
 
 ---
 
 ## Architecture
 
-The app is a **client-only PWA** that talks directly to Supabase over HTTPS using
-the user's JWT. There is no app server. All policy enforcement lives in
-**Postgres RLS** (`auth.uid() = user_id` on every table). Offline correctness
-comes from a **write-through repository** that writes Dexie first, queues a
-mutation, then drains the queue against Supabase with idempotent upserts.
+The app is a **client-only PWA** that talks straight to Supabase over HTTPS
+using the user's JWT. There is no app server. All policy enforcement lives in
+**Postgres RLS** (`auth.uid() = user_id` on every table).
+
+There is **no offline mirror** — every read goes through a React Query hook
+that hits `supabase.from(...).select()`, every mutation goes through
+`src/lib/api.ts` and calls Supabase inline. After a mutation the caller
+`invalidateQueries(['<key>'])` so the UI refetches. Connectivity is required.
+
+The one server-side piece is a small Deno Edge Function
+(`supabase/functions/ocr-receipt`) that proxies receipt images to Claude
+vision so the Anthropic API key never reaches the browser.
 
 ```mermaid
 flowchart TB
     subgraph Device["iPhone (PWA / Safari standalone)"]
         UI["React 18 UI<br/>(pages + components)"]
         SW["Workbox Service Worker<br/>app shell + FBX + textures"]
-        RQ["TanStack Query<br/>(read caching)"]
-        Repo["Repository façade<br/>(src/lib/sync/repository.ts)"]
-        Dexie[("Dexie / IndexedDB<br/>mirror + _dirty flags")]
-        PendMut["pending_mutations<br/>(FIFO queue)"]
-        PendUp["pending_uploads<br/>(receipt blobs)"]
-        Flush["Flush loop<br/>online + backoff"]
-        Pull["Delta pull<br/>(updated_at > lastSyncedAt)"]
+        RQ["TanStack Query<br/>(read cache + invalidate)"]
+        API["src/lib/api.ts<br/>(direct mutations)"]
+        OCR["src/lib/ocr.ts<br/>(base64 + invoke)"]
         Three["CarViewer (lazy)<br/>three.js + FBXLoader"]
+        Dock["DevToolsDock<br/>⬆ ↻ 🩺 (bottom-left)"]
     end
 
     subgraph Cloud["Supabase"]
@@ -72,44 +81,59 @@ flowchart TB
         PG[("Postgres tables<br/>+ RLS auth.uid()=user_id")]
         ST[("Storage: receipts bucket<br/>(uid)/(visit)/(uuid).jpg")]
         Trig["on_auth_user_created<br/>seed vehicle + 2 centers"]
+        EF[["Edge Function<br/>ocr-receipt (Deno)"]]
+        Sec[("ANTHROPIC_API_KEY<br/>(Supabase secrets)")]
     end
 
-    UI --> RQ
-    UI --> Repo
-    Repo --> Dexie
-    Repo --> PendMut
-    Repo --> PendUp
-    UI -- "useLiveQuery" --> Dexie
-    UI --> Three
+    subgraph Ext["External"]
+        Anth["api.anthropic.com<br/>claude-sonnet-4-6 vision"]
+    end
 
-    Flush -- "upsert (user_id,local_uuid)" --> PG
-    Flush --> ST
-    PendMut --> Flush
-    PendUp --> Flush
-    Pull --> PG
-    Pull --> Dexie
+    UI -- "useQuery hooks" --> RQ
+    RQ -- "supabase.from(...).select()" --> PG
+    UI -- "save / edit / delete" --> API
+    API -- "supabase.from(...).insert/update/delete" --> PG
+    API -- "Storage.upload (receipt)" --> ST
+    UI -- "render" --> Three
+
+    UI -- "🔍 OCR" --> OCR
+    OCR -- "supabase.functions.invoke('ocr-receipt', {imageBase64, mimeType})" --> EF
+    EF -- "x-api-key from Sec" --> Anth
+    Anth -- "extracted JSON" --> EF
+    EF --> OCR
+
+    UI -- "⬆ ↻ 🩺" --> Dock
+    Dock -- "queryClient.invalidateQueries()" --> RQ
+    Dock -- "count exact head:true" --> PG
 
     SW -. "CacheFirst /models/*.fbx,<br/>/textures/*.png" .-> Device
     SW -. "NetworkFirst Supabase REST" .-> PG
 
-    Auth -- JWT --> Repo
+    Auth -- "JWT" --> RQ
+    Auth -- "JWT" --> API
+    Auth -- "JWT (auto by supabase-js)" --> EF
     Auth --> Trig
     Trig --> PG
 ```
 
 **Key invariants:**
 
-- **Mutations never block on network.** UI sees the new row the moment the Dexie
-  transaction commits. The flush loop drains the queue asynchronously.
-- **Idempotency** via `(user_id, local_uuid)` unique constraints on the two
-  high-volume tables (`maintenance_visits`, `maintenance_items`). Replays are
-  safe.
+- **Single source of truth.** Every row lives only on the server. The
+  React Query cache is a transient read accelerator with `staleTime`
+  10–30 s per hook — drop it (⬆ button) and you immediately see canonical
+  state on the next refetch.
 - **RLS is the only ACL.** Even if the client were compromised, RLS prevents
   cross-user reads/writes.
-- **The 3D viewer is `React.lazy`-loaded** so the login / non-dashboard routes
-  don't pay the ~880 KB three.js cost.
-- **FBX (6 MB) is excluded from precache** and loaded via runtime `CacheFirst`
-  to keep the SW install under 5 MB.
+- **No write queue, no replay.** A failed mutation throws to the caller
+  and the form surfaces the error. No silent drift, no resurrected ghosts.
+- **The Anthropic key never reaches the browser** — only the Edge
+  Function holds it (`Deno.env.get("ANTHROPIC_API_KEY")` from Supabase
+  secrets). `supabase.functions.invoke()` auto-attaches the user's JWT
+  so the function is auth-gated by default.
+- **The 3D viewer is `React.lazy`-loaded** so the login / non-dashboard
+  routes don't pay the ~880 KB three.js cost.
+- **FBX (6 MB) is excluded from precache** and loaded via runtime
+  `CacheFirst` to keep the SW install under 5 MB.
 
 ---
 
@@ -166,7 +190,7 @@ erDiagram
         uuid local_uuid UK
         uuid visit_id FK
         uuid user_id FK
-        smallint category_code "1..6"
+        smallint category_code "1..7 after 0004"
         text part_name
         numeric quantity
         numeric total_price
@@ -175,11 +199,16 @@ erDiagram
     CUSTOM_PARTS {
         uuid id PK
         uuid user_id FK
-        smallint category_code "1..6"
+        smallint category_code "1..7 after 0004"
         text part_name
         UK "user_id+category_code+part_name"
     }
 ```
+
+`local_uuid` columns are vestigial from the offline-first era — kept for
+schema compatibility with old rows. New inserts populate it with a fresh
+UUID. We no longer rely on the `(user_id, local_uuid)` upsert idempotency
+because every mutation is a single direct call now.
 
 **Category codes** (extended past `Maintainance_pattern.txt` by migration 0004):
 
@@ -187,7 +216,7 @@ erDiagram
 |---|---|---|
 | 1 | ของเหลวและสารหล่อลื่น | Fluids & Lubricants |
 | 2 | ระบบไอดี ไอเสีย และไส้กรอง | Filters & Emission System |
-| 3 | ระบบไฟและชิ้นส่วนเฉพาะเครื่องดีเซล | Engine & Electrical |
+| 3 | ระบบไฟและชิ้นส่วนเฉพาะเครื่องดีเซล | Diesel Engine & Electrical |
 | 4 | ช่วงล่าง เบรก และยาง | Chassis, Brakes & Tires |
 | 5 | ชิ้นส่วนสิ้นเปลือง | General Consumables |
 | 6 | เครื่องยนต์ | Engine *(added by 0004)* |
@@ -202,7 +231,7 @@ into the dropdown next time.
 on `auth.users` insert:
 
 - 1 × `vehicles` — `('ขข4699', 'Mazda CX-5', 2016, 0)`
-- 2 × `service_centers` — `'Mazda จันทบุรี'` + `'Mazda ระยอง'` (both `is_default=true`)
+- 2 × `service_centers` — `'Mazda จันทบุรี'` + `'Mazda ระยอง'`
 
 **Storage bucket `receipts`** is private. Path:
 `<auth.uid()>/<visit_id>/<uuid>.jpg`. Object-level RLS:
@@ -212,68 +241,68 @@ on `auth.users` insert:
 
 ## Flow charts
 
-### 1. Adding a maintenance record (online and offline)
+### 1. Adding a maintenance record
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor U as User
     participant P as AddMaintenancePage
-    participant R as repository.insertVisit
-    participant D as Dexie
-    participant Q as pending_mutations
-    participant F as flush.ts
-    participant S as Supabase
+    participant A as api.insertVisit
+    participant ST as Storage (receipts)
+    participant PG as Postgres (RLS)
+    participant Q as React Query cache
 
     U->>P: pick date, mileage, items, optional photo
     P->>P: compressImage() (≤1 MB, 1600 px)
-    P->>R: insertVisit(userId, draft)
-    activate R
-    R->>R: generate visit.id, items[].id, local_uuids
-    R->>D: tx.put visit + bulkPut items (_dirty=1)
-    R->>Q: enqueue insert(visits) + insert(items)
-    R->>Q: enqueue pending_uploads (if photo)
-    R-->>P: { visitId, pendingReceipt }
-    deactivate R
-    P-->>U: navigate to "/" (card already visible)
-
-    R->>F: scheduleFlush()
-    alt online
-        F->>S: POST /rest/v1/maintenance_visits<br/>upsert onConflict=user_id,local_uuid
-        S-->>F: 201 + row
-        F->>D: put({...row, _dirty:0})
-        F->>Q: delete mutation
-        F->>S: POST /storage/v1/receipts (if blob)
-        F->>D: patch receipt_image_path, enqueue update
-    else offline / 5xx
-        F->>Q: attempts++, backoff(2^n, cap 30s)
-        Note over F,Q: retried on online/visibility/focus events
+    P->>A: insertVisit(userId, draft)
+    activate A
+    opt photo attached
+        A->>ST: upload(receipts/<uid>/<visit>/<uuid>.jpg)
+        ST-->>A: 200 + path
     end
+    A->>PG: insert maintenance_visits (id, ..., receipt_image_path)
+    PG-->>A: 201
+    A->>PG: insert maintenance_items (rows)
+    PG-->>A: 201
+    A-->>P: { visitId }
+    deactivate A
+    P->>Q: invalidateQueries(['visits', userId], ['visit-count'...], ['by-part'...])
+    P-->>U: navigate to /
+    U->>Q: dashboard mounts → useMaintenanceVisits refetches
+    Q->>PG: select maintenance_visits ... range(0, 4)
+    PG-->>Q: fresh rows → render
 ```
 
-### 2. Delta pull on login + after every flush
+### 2. Receipt OCR
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant A as App boot / sign-in
-    participant P as pull.ts
-    participant M as meta.lastSyncedAt
-    participant S as Supabase
-    participant D as Dexie
+    actor U as User
+    participant P as AddMaintenancePage
+    participant O as ocrReceipt
+    participant EF as Edge Function<br/>(ocr-receipt)
+    participant AN as Anthropic API<br/>claude-sonnet-4-6
+    participant R as OcrReview modal
 
-    A->>P: pullAll()
-    P->>M: read lastSyncedAt (default 1970-01-01)
-    par parallel selects
-        P->>S: select * from vehicles where updated_at >= since
-        P->>S: select * from service_centers where created_at >= since
-        P->>S: select * from maintenance_visits where updated_at >= since
-        P->>S: select * from maintenance_items where created_at >= since
-        P->>S: select * from custom_parts where created_at >= since
-    end
-    S-->>P: rows (RLS already filtered by auth.uid())
-    P->>D: bulkPut(rows.map(r => ({...r, _dirty:0})))
-    P->>M: write new lastSyncedAt = now()
+    U->>P: attach receipt photo
+    U->>P: tap 🔍 อ่านข้อมูลจากรูป (OCR)
+    P->>O: ocrReceipt(blob)
+    O->>O: FileReader → base64 (strip "data:...;base64,")
+    O->>EF: supabase.functions.invoke('ocr-receipt', { imageBase64, mimeType })
+    Note over EF: JWT auto-attached by supabase-js
+    EF->>AN: POST /v1/messages<br/>image + Thai-aware prompt
+    AN-->>EF: text content (strict JSON array)
+    EF->>EF: strip ```json fences, JSON.parse, validate shape
+    EF-->>O: { items: [{ partName, quantity, unitPrice }, ...] }
+    O-->>P: OcrItem[]
+    P->>R: open with items
+    U->>R: edit fields, assign หมวด per row
+    U->>R: tap "บันทึก N รายการ" (bottom-right)
+    R-->>P: DraftItem[] (each carries categoryCode)
+    P->>P: merge into rows[categoryCode]
+    Note over U,P: user still has to tap the OUTER save bar<br/>to commit the visit
 ```
 
 ### 3. User journey
@@ -287,11 +316,13 @@ flowchart LR
 
     D -->|'+ เพิ่มข้อมูล'| ADD[/Add maintenance/]
     D -->|'ประวัติ maintainance'| H[/History calendar/]
-    D -->|'ข้อมูลแยกตาม part'| BPI[/By-part index — 6 symbols/]
+    D -->|'ข้อมูลแยกตาม part'| BPI[/By-part index — 7 symbols/]
     D -->|tap pencil on a card| EDIT[/edit/:visitId same form/]
     D -->|tap mileage| MI[Edit mileage inline]
-    D -->|tap card receipt| R[/Receipt modal/]
+    D -->|tap card receipt| RM[/Receipt modal/]
+    D -->|tap ⬆ ↻ 🩺| DT[DevToolsDock]
 
+    ADD -->|🔍 OCR| OCR[OcrReview modal] --> ADD
     ADD -->|save| D
     EDIT -->|save / delete| D
     H -->|tap day w/ red dot| HC[Day's cards] -->|pencil| EDIT
@@ -306,15 +337,20 @@ sequenceDiagram
     participant B as Browser
     participant SA as Supabase Auth
     participant P as Postgres + RLS
+    participant EF as Edge Function
 
-    B->>SA: POST /auth/v1/token<br/>grant_type=password
+    B->>SA: POST /auth/v1/token grant_type=password
     SA-->>B: JWT (access + refresh)
     B->>B: supabase-js stores JWT in localStorage
-    Note over B: every subsequent request<br/>carries Authorization: Bearer <JWT>
+    Note over B: every subsequent supabase.* call<br/>auto-attaches Authorization: Bearer <JWT>
 
     B->>P: select * from maintenance_visits
     Note over P: RLS rewrites WHERE clause:<br/>user_id = auth.uid()
     P-->>B: only this user's rows
+
+    B->>EF: supabase.functions.invoke('ocr-receipt', ...)
+    Note over EF: JWT auto-attached → function gate passes
+    EF-->>B: OCR JSON
 ```
 
 ---
@@ -327,26 +363,24 @@ public/
   textures/{lights,tire,tire_N}.png
   fonts/                          Inter Variable + IBM Plex Sans Thai (self-hosted)
   icons/                          PWA icons (192/512/maskable/apple-touch-180)
+  icons/categories/cat-1..7.png   PNG buttons from /Button (compressed)
   favicon.svg
 
 src/
   main.tsx, App.tsx, router.tsx, index.css, test-setup.ts
 
   types/
-    db.ts                         Hand-written DB row types (mirrors SQL schema)
-    domain.ts                     UI-level types (e.g. MaintenanceVisitWithItems)
+    db.ts                         Hand-written DB row types
+    domain.ts                     UI-level types (DraftItem, DraftVisit, ...)
 
   lib/
-    supabase/{client,session}.ts  createClient + useSession hook
-    sync/
-      db.ts                       Dexie schema + clearLocalUserData
-      queue.ts                    enqueue() + pendingCount()
-      flush.ts                    drain loop + backoff + listeners
-      pull.ts                     delta pull
-      repository.ts               write-through façade (used by all UI mutations)
-    thai-date/index.ts            BE conversion + 7 formatters (+ 16 unit tests)
-    categories.ts                 6 categories + seed parts from Maintainance_pattern.txt
+    api.ts                        Direct-Supabase mutations
+    ocr.ts                        supabase.functions.invoke('ocr-receipt')
+    vat.ts                        VAT 7% helpers — vatOf, withVat, breakdown
     image.ts                      compressImage() (≤1 MB / 1600 px)
+    categories.ts                 7 categories + seed parts
+    supabase/{client,session}.ts  createClient + useSession hook
+    thai-date/index.ts            BE conversion + formatters (+ 24 unit tests)
 
   three/
     CarViewer.tsx                 lazy-loaded; transparent Canvas, OrbitControls
@@ -354,19 +388,19 @@ src/
     inspect-fbx.md                Notes for one-time mesh-name confirmation
 
   hooks/
-    useOnlineStatus.ts            navigator.onLine + pending count + last error
-    useVehicle.ts                 Current user's primary vehicle
-    useMaintenanceVisits.ts       Pageable visits + visits-in-range + date-set
-    useByPart.ts                  Items grouped by part_name with timeline
-    useCustomParts.ts             useServiceCenters + useCustomParts(category)
-    useReceiptUrl.ts              Signed-URL cache for receipt images
+    useVehicle.ts                 React Query — current user's vehicle
+    useMaintenanceVisits.ts       React Query — paginated + ranged + dateSet + count + single
+    useByPart.ts                  React Query — grouped by part_name
+    useCustomParts.ts             React Query — useServiceCenters + useCustomParts(code)
+    useReceiptUrl.ts              Supabase Storage signed-URL cache
+    useDriftStatus.ts             Polls (every 5 min) — RQ cache count vs server count
 
   store/ui.ts                     Zustand: historyMonth, dashboardPage, expandedParts
 
   pages/
     LoginPage.tsx                 Email + password, iOS "Add to Home Screen" hint
     DashboardPage.tsx             3-pill action row + 3D + mileage overlay + recent cards
-    AddMaintenancePage.tsx        Shared form for /add AND /edit/:visitId
+    AddMaintenancePage.tsx        Shared form for /add AND /edit/:visitId + OCR trigger
     HistoryCalendarPage.tsx       Thai calendar w/ red dots + bottom monthly summary
     ByPartIndexPage.tsx           2×3 grid of category symbols (transparent, no labels)
     ByPartPage.tsx                Drill-in to category, tap part → timeline
@@ -375,6 +409,7 @@ src/
     AppShell.tsx                  Brand-blue wrapper; mounts DevToolsDock
     AuthGuard.tsx                 Redirects to /login when session is null
     DevToolsDock.tsx              Bottom-left ⬆ ↻ 🩺 controls + drift red-dot
+    OcrReview.tsx                 Modal: extracted items + category assignment + save
     MileageOverlay.tsx            Inline-editable mileage on the 3D viewer
     CategoryIcon.tsx              <img> wrapper for public/icons/categories/cat-N.png
     MaintenanceCard.tsx           Visit card w/ pencil edit + เช็คระยะ pill + VAT
@@ -388,19 +423,9 @@ src/
     CategorySection.tsx           Collapsible category w/ qty + unit + total + notes
     Spinner.tsx
 
-  lib/
-    vat.ts                        VAT 7% helpers — vatOf, withVat, breakdown
-    sync/
-      ...                         repository / flush / pull / queue (above)
-      schema-probe.ts             Detects optional columns (0002, 0003) at boot
-      force-resync.ts             Resets attempts + revives dead_letters
-      reload.ts                   SW skip-waiting + location.reload
-      drift.ts                    runDriftCheck — local vs Supabase counts
-  hooks/
-    ...                           session / vehicle / maintenance / by-part (above)
-    useDriftStatus.ts             Auto-poll runDriftCheck every 5 min
-
 supabase/
+  functions/
+    ocr-receipt/index.ts          Deno edge function → Anthropic Claude vision
   migrations/
     0001_init.sql                 Tables + RLS + new-user trigger + storage bucket
     0002_item_notes.sql           Adds maintenance_items.notes
@@ -419,27 +444,15 @@ npm install
 cp .env.example .env.local         # fill in VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
 ```
 
-### 2. Provision Supabase
+### 2. Provision Supabase (schema + auth)
 
 1. Create a project at https://supabase.com.
 2. Copy the API URL + `anon` public key into `.env.local`.
 3. Supabase dashboard → SQL editor → run migrations **in order**:
-   - [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
-     — tables, RLS, new-user seed trigger, storage bucket.
-   - [`supabase/migrations/0002_item_notes.sql`](supabase/migrations/0002_item_notes.sql)
-     — adds `maintenance_items.notes`.
-   - [`supabase/migrations/0003_visit_scheduled.sql`](supabase/migrations/0003_visit_scheduled.sql)
-     — adds `maintenance_visits.is_scheduled` ("เช็คระยะ" flag).
-   - [`supabase/migrations/0004_add_engine_category.sql`](supabase/migrations/0004_add_engine_category.sql)
-     — adds category 6 = "เครื่องยนต์" (Engine), demotes "อื่นๆ" to code 7,
-     and renumbers existing code-6 rows.
-
-   The client self-heals if 0002 / 0003 aren't applied (schema-probe + flush
-   strip the unknown columns), but the per-item `notes` and the `เช็คระยะ`
-   checkbox state are silently dropped until those migrations run. **0004
-   must be applied before the client that contains the engine category
-   goes live** — the new code 6 means Engine, the old DB constraint still
-   thinks code 6 means Others.
+   - [`0001_init.sql`](supabase/migrations/0001_init.sql) — tables, RLS, seed trigger, storage bucket.
+   - [`0002_item_notes.sql`](supabase/migrations/0002_item_notes.sql) — adds `maintenance_items.notes`.
+   - [`0003_visit_scheduled.sql`](supabase/migrations/0003_visit_scheduled.sql) — adds `maintenance_visits.is_scheduled`.
+   - [`0004_add_engine_category.sql`](supabase/migrations/0004_add_engine_category.sql) — category 6 = Engine, demotes Others to 7.
 4. Authentication → Providers → enable **Email**.
 
 Or via [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -450,7 +463,31 @@ supabase link --project-ref YOUR_REF
 supabase db push     # applies every file under supabase/migrations/ in order
 ```
 
-### 3. Dev / build
+### 3. Deploy the OCR edge function
+
+```bash
+# from the project root (cwd matters — CLI reads supabase/functions/ relative to it)
+cd C:\path\to\Car_maintainance
+
+# Set the Anthropic API key as a Supabase secret. NEVER commit it; NEVER paste
+# it into a public chat. Rotate it immediately if exposed.
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-api03-...
+
+# Deploy. JWT verification is on by default — only signed-in users can call it.
+supabase functions deploy ocr-receipt
+```
+
+Verify:
+
+```bash
+supabase functions list      # ocr-receipt should appear
+supabase secrets list        # ANTHROPIC_API_KEY name should be present (value hidden)
+```
+
+If you skip this step, the 🔍 OCR button on `/add` will return an error
+toast — every other surface still works.
+
+### 4. Dev / build
 
 ```bash
 npm run dev           # http://localhost:5173
@@ -482,10 +519,13 @@ subsequent launches load it offline.
 2. Confirm the `handle_new_user` trigger seeded a vehicle + 2 service centers
    (check Supabase Studio).
 3. Add a visit dated today — every visible date should render as พ.ศ.
-4. **Offline replay**: DevTools → Application → Service Workers → Offline.
-   Add a second visit; it appears immediately in the dashboard.
-   Re-enable network; within ≤ 5 s the new row appears in Postgres and Dexie
-   `pending_mutations` is empty.
+4. **Reads refresh after mutation.** After save the dashboard list shows
+   the new card immediately (`invalidateQueries` triggers refetch).
+5. **Offline behaviour.** Toggle DevTools → Network → Offline. Try to
+   save — the form surfaces a network error. No silent queue, no
+   pending state.
+6. **OCR.** Attach a receipt → tap 🔍. If the function is deployed
+   with a valid key, a review modal opens with extracted rows.
 
 ### Unit tests
 
@@ -521,71 +561,71 @@ Run Chrome DevTools → Lighthouse → PWA. Target ≥ 90.
 
 ---
 
-## DevTools dock + sync internals
+## DevTools dock
 
-Three floating controls at the bottom-left of every authenticated screen
-(modelled on `/Shift_count/index.html`'s `bottom-bar`):
+Three floating controls at the bottom-left of every authenticated screen.
+The dock is **server-direct** — it pokes React Query and the service
+worker, not a Dexie queue (the previous offline-first dock relied on a
+write queue + dead-letter table that have both been removed).
 
 | Icon | Function | Behaviour |
 |---|---|---|
-| ⬆ | **force-resync queue + dead-letter** | `forceResyncQueue()` resets `attempts`/`last_error` on every pending mutation, revives every row from `dead_letters` back into `pending_mutations`, then schedules a flush. Toast reports `{reset, revived}`. |
-| ↻ | **reload app version** | `swReg.update()` → `postMessage('SKIP_WAITING')` if a worker is `waiting` → `location.reload()`. IndexedDB + Workbox caches survive, so the 6 MB FBX + the offline queue are preserved. |
-| 🩺 | **drift check** | `runDriftCheck(userId)` counts `pending_mutations`, `pending_uploads`, `dead_letters`, stuck-pending (attempts > 3), and per-table `local` vs `server` (HEAD-only). Auto-polls every 5 min via `useDriftStatus`. Red dot on the 🩺 button when `drifted === true`. |
-
-`flush.ts` dead-letters mutations after `MAX_ATTEMPTS = 12` (≈ 5 min of capped
-exponential backoff). Dead-lettered rows don't auto-retry — the ⬆ button is
-the path back.
-
-`schema-probe.ts` HEAD-checks two optional columns at sign-in:
-`maintenance_items.notes` (added by 0002) and `maintenance_visits.is_scheduled`
-(0003). If either is missing, `flush.applyMutation` strips that field from
-upserts so the rest of the row still syncs. The console.error message points
-at the exact migration file to apply.
+| ⬆ | **force-resync** | `queryClient.invalidateQueries()` drops every cached query, the active hooks refetch from Supabase. Toast reports the number of touched queries. |
+| ↻ | **reload app version** | `swReg.update()` → `postMessage('SKIP_WAITING')` if a worker is `waiting` → `location.reload()`. Workbox runtime caches (FBX, textures, fonts, `supabase-rest` GET cache) survive so the 6 MB FBX isn't re-fetched. |
+| 🩺 | **drift check** | Fetches `count: 'exact', head: true` for `maintenance_visits` and `maintenance_items` of the current user, compares against React Query cache counts (`['visit-count', uid]` + sum of cached `['visits', uid]` pages). Red dot on the button when local ≠ server. Auto-polls every 5 minutes via `useDriftStatus`. |
 
 VAT 7% (`src/lib/vat.ts`) is a **display-only transform**. The DB still
 stores `total_price` as the pre-VAT row total; every card / form sticky
 bar / monthly summary pipes the same `breakdown(subtotal)` so the three
 numbers (subtotal / VAT / grand total) stay consistent everywhere.
 
+---
+
 ## Recent additions
 
+- **Receipt OCR via Claude vision** — Edge Function `ocr-receipt` extracts items
+  from receipt photos; `OcrReview` modal lets the user assign categories per
+  row before merging into the Add form.
+- **Server-direct refactor** — removed `src/lib/sync/*`, Dexie, dead-letters
+  and the queue. Reads are React Query → Supabase, mutations are
+  `src/lib/api.ts` → Supabase, then `invalidateQueries`. See
+  [BUGS.md "dexie-sync-removed-radical-fix"](BUGS.md).
+- **DevToolsDock back** — ⬆ ↻ 🩺 buttons re-wired for the server-direct
+  world (no queue to flush, drift compares cache vs server counts).
 - **VAT 7%** breakdown on every `MaintenanceCard`, the Add form's sticky save
-  bar, and the new bottom-of-history monthly summary card.
+  bar, and the bottom-of-history monthly summary card.
 - **เช็คระยะ checkbox** below ศูนย์บริการ on the Add form; shows as a brand-tint
   pill next to the date on cards.
-- **Monthly summary** card at the bottom of `/history` — number of visits +
-  subtotal + VAT + grand total for the displayed month, updates as the user
-  navigates.
-- **DevToolsDock** (⬆ ↻ 🩺) at bottom-left.
-- **Editable visits** — every `MaintenanceCard` has a pencil button → `/edit/:visitId`.
-- **Per-item and visit-level notes** wired end-to-end (migrations 0002 + still
-  visible in `MaintenanceCard`).
-- **Three-pill dashboard** — `+ เพิ่มข้อมูล`, `ข้อมูลแยกตาม part`, `ประวัติ` share
-  `.action-pill` styling.
+- **Monthly summary** card on `/history` — visit count + subtotal + VAT + grand
+  total for the displayed month.
+- **Editable visits** — pencil button on every `MaintenanceCard` → `/edit/:visitId`.
+- **Per-item and visit-level notes** wired end-to-end (migrations 0002).
+- **Three-pill dashboard** — `+ เพิ่มข้อมูล`, `ข้อมูลแยกตาม part`, `ประวัติ`.
 - **/by-part index** — 2 cols × 3 rows of big transparent symbols, no labels.
-- **PNG category icons** — `public/icons/categories/cat-{1..6}.png` (10–56 KB each).
+- **PNG category icons** — `public/icons/categories/cat-{1..7}.png` (10–56 KB each).
 - **3D viewer reverted to FBX-default colours**; `useCarModel` body slot is a
   no-op so the source material shows through.
 - **Card shadows = none** — `shadow-card` / `shadow-soft` tokens intentionally empty.
 
+---
+
 ## Open items
 
-1. **FBX mesh-name mapping** — texture substring rules in
+1. **No offline support.** A user on the subway can't save. If this becomes
+   painful we'd consider a write-only queue (not a full mirror) — but only
+   after a real repro of the duplication path that killed the Dexie layer.
+2. **FBX mesh-name mapping** — texture substring rules in
    [`useCarModel.ts`](src/three/useCarModel.ts) (`/tire|wheel/`, `/light|lamp/`,
    etc.) need one-time confirmation against the actual mesh names of the
-   shipped FBX. See [`src/three/inspect-fbx.md`](src/three/inspect-fbx.md) for
-   the inspection snippet.
-2. **Universal Sans license** — using Inter + IBM Plex Sans Thai as a free
+   shipped FBX. See [`src/three/inspect-fbx.md`](src/three/inspect-fbx.md).
+3. **Universal Sans license** — using Inter + IBM Plex Sans Thai as a free
    substitute. To switch to a licensed Universal Sans build, replace the woff2
    files in `public/fonts/` and update the `@font-face` family names in
    [`src/index.css`](src/index.css).
-3. **`gh` CLI not installed** — pushing to GitHub uses raw `git push`; there's
-   no PR / issue tooling configured locally.
-4. **Migrations 0002 + 0003 must be applied to the live Supabase project** for
-   the per-item `notes` and the `เช็คระยะ` flag to survive on the server. The
-   client self-heals (strips the unknown column) so other fields still sync,
-   but those two values are silently null on the server until the migrations
-   run.
-5. **Drift check budget** — `useDriftStatus` fires 5 HEAD requests every
-   5 min per signed-in tab. If we ever add more tables to the per-entity
-   compare, watch the cumulative request rate.
+4. **`gh` CLI not installed** — raw `git push` only.
+5. **Migrations 0001–0004 must all be applied** to the live Supabase project,
+   and `ocr-receipt` must be deployed with `ANTHROPIC_API_KEY` set, before
+   first user use.
+6. **Edge Function costs.** Each receipt OCR is one Anthropic API call
+   (`claude-sonnet-4-6` vision). Keep an eye on quota on the Anthropic
+   console if the app gets shared with more than one user.
