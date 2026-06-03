@@ -1,5 +1,5 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/sync/db';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/client';
 import type { CategoryCode } from '@/lib/categories';
 import type { MaintenanceItemRow, MaintenanceVisitRow } from '@/types/db';
 
@@ -17,59 +17,61 @@ export interface PartGroup {
   entries: PartTimelineEntry[];
 }
 
+interface ItemWithVisit extends MaintenanceItemRow {
+  visit?: Pick<MaintenanceVisitRow, 'id' | 'service_date'> | null;
+}
+
 /** Group items by part_name within a single category, newest entry first. */
 export function useByPart(
   userId: string | undefined,
   categoryCode: CategoryCode,
 ): PartGroup[] {
-  return (
-    useLiveQuery(
-      async () => {
-        if (!userId) return [];
-        const [items, visits] = await Promise.all([
-          db.maintenance_items
-            .where('user_id')
-            .equals(userId)
-            .and((i) => i.category_code === categoryCode)
-            .toArray(),
-          db.maintenance_visits.where('user_id').equals(userId).toArray(),
-        ]);
-        const visitMap = new Map<string, MaintenanceVisitRow>(visits.map((v) => [v.id, v]));
-        const groups = new Map<string, PartGroup>();
-        for (const it of items as MaintenanceItemRow[]) {
-          const v = visitMap.get(it.visit_id);
-          if (!v) continue;
-          const g = groups.get(it.part_name) ?? {
-            partName: it.part_name,
-            totalSpent: 0,
-            count: 0,
-            entries: [] as PartTimelineEntry[],
-          };
-          g.totalSpent += Number(it.total_price ?? 0);
-          g.count += 1;
-          g.entries.push({
-            visitId: v.id,
-            serviceDate: v.service_date,
-            quantity: Number(it.quantity ?? 1),
-            totalPrice: Number(it.total_price ?? 0),
-          });
-          groups.set(it.part_name, g);
-        }
-        const arr = [...groups.values()];
-        for (const g of arr) {
-          g.entries.sort((a, b) => (a.serviceDate < b.serviceDate ? 1 : -1));
-        }
-        // Sort groups by most recent entry then total spent.
-        arr.sort((a, b) => {
-          const da = a.entries[0]?.serviceDate ?? '';
-          const db_ = b.entries[0]?.serviceDate ?? '';
-          if (da !== db_) return da < db_ ? 1 : -1;
-          return b.totalSpent - a.totalSpent;
+  const { data } = useQuery({
+    queryKey: ['by-part', userId, categoryCode],
+    queryFn: async (): Promise<PartGroup[]> => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('maintenance_items')
+        .select('*, visit:maintenance_visits(id, service_date)')
+        .eq('user_id', userId)
+        .eq('category_code', categoryCode);
+      if (error) throw error;
+
+      const rows = (data ?? []) as ItemWithVisit[];
+      const groups = new Map<string, PartGroup>();
+      for (const it of rows) {
+        if (!it.visit) continue;
+        const g = groups.get(it.part_name) ?? {
+          partName: it.part_name,
+          totalSpent: 0,
+          count: 0,
+          entries: [] as PartTimelineEntry[],
+        };
+        g.totalSpent += Number(it.total_price ?? 0);
+        g.count += 1;
+        g.entries.push({
+          visitId: it.visit.id,
+          serviceDate: it.visit.service_date,
+          quantity: Number(it.quantity ?? 1),
+          totalPrice: Number(it.total_price ?? 0),
         });
-        return arr;
-      },
-      [userId, categoryCode],
-      [],
-    ) ?? []
-  );
+        groups.set(it.part_name, g);
+      }
+
+      const arr = [...groups.values()];
+      for (const g of arr) {
+        g.entries.sort((a, b) => (a.serviceDate < b.serviceDate ? 1 : -1));
+      }
+      arr.sort((a, b) => {
+        const da = a.entries[0]?.serviceDate ?? '';
+        const db_ = b.entries[0]?.serviceDate ?? '';
+        if (da !== db_) return da < db_ ? 1 : -1;
+        return b.totalSpent - a.totalSpent;
+      });
+      return arr;
+    },
+    enabled: !!userId,
+    staleTime: 10_000,
+  });
+  return data ?? [];
 }

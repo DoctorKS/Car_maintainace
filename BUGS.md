@@ -244,3 +244,41 @@ Pushed [`8a24427`](https://github.com/DoctorKS/Car_maintainace/commit/8a24427).
 Pushed [`750b569`](https://github.com/DoctorKS/Car_maintainace/commit/750b569).
 
 ---
+
+## 2026-06-04 — dexie-sync-removed-radical-fix
+**Commit:** TBD (this commit) — supersedes the fix from
+[`750b569`](https://github.com/DoctorKS/Car_maintainace/commit/750b569)
+**Files:** removed `src/lib/sync/` (db, queue, flush, pull, repository, schema-probe, force-resync, reload, drift, dedupe), removed `src/components/DevToolsDock.tsx`, removed `src/hooks/useDriftStatus.ts` + `useOnlineStatus.ts`; new `src/lib/api.ts`; React-Query rewrite of every hook in `src/hooks/`; package.json drops `dexie` + `dexie-react-hooks`.
+
+### 1. ปัญหาที่เกิด
+User report ตามต่อ entry 7: "pull-guard-tombstone-race 750b569 (entry เดิม — pull resurrect after delete) ยังไม่หาย" — ผ่านมาแล้วก็ยังเห็น duplicate ใน Dexie ที่ Supabase ไม่มี User สั่งตรงๆ ว่า "ลบ function ของ dexie ไปเลย"
+
+### 2. Root cause
+Hypothesis ใน entry 7 (pullAll resurrection หลัง delete) ครอบไม่หมด — ยังมี code path ที่ผม trace ไม่เจอใน session ที่ทำให้ Dexie ได้ row ที่ Supabase ไม่ได้ ขาด reliable repro จริงๆ → debug-mantra step 1 ไม่ผ่าน → fix อะไรเพิ่มก็ยัง band-aid
+
+### 3. Process (ทำไมจาก root cause ถึงเกิดปัญหา)
+1. Commit ce3c6a6 ลงทุน offline-first stack: Dexie mirror + pending_mutations + flush loop + pull
+2. ทุก mutation มี source of truth 2 ที่: Dexie (local) + Supabase (server) → ต้องประสานกัน
+3. ทุก path ที่ทำให้สองที่หลุดประสาน = duplicate / lost-update / resurrection — ที่ trace ได้ใน [entry 7](#2026-06-04--pull-guard-tombstone-race) คือ pull-after-delete แต่อาจมี race อื่นที่ยัง trace ไม่เจอ (e.g. flush retry กับ pull, useLiveQuery snapshot กับ transaction commit, Dexie schema migration v1→v2→v3 ทิ้ง row บางกลุ่มไว้)
+4. แต่ละ race ที่ fix ลงไป (pull-guard, tombstones, dedupe) ลด surface ลงทีละนิด แต่ไม่ได้เผด็จ
+5. User ยังเห็น duplicate → confidence ใน sync layer drop → ROI ของ offline-first กับ bug rate ที่ตามมาเข้าจุด tipping
+6. ตัดสินใจตาม scrutinize skill ("simpler alternative"): **เอา Dexie ออกทั้งระบบ** เหลือ source of truth ที่เดียว = Supabase. ไม่มี race เพราะไม่มี local mirror
+
+### 4. วิธีการที่แก้
+- ลบ folder `src/lib/sync/` ทั้งหมด — Dexie schema, mutation queue, flush loop, pull, schema probe, dead letters, force-resync, reload, dedupe, drift check ทั้งหมดหายไป
+- เขียน [`src/lib/api.ts`](src/lib/api.ts) ใหม่ — `insertVisit` / `updateVisit` / `deleteVisit` / `updateMileage` / `insertServiceCenter` / `insertCustomPart` ทุกตัวเรียก `supabase.from(...).insert/update/delete()` ตรงๆ receipt upload inline (upload **ก่อน** insert visit เพื่อกัน partial state)
+- เขียน hooks ใน [`src/hooks/`](src/hooks/) ใหม่ทั้งหมดด้วย React Query (`useQuery`) — `useVehicle`, `useMaintenanceVisits` (พร้อม paginated + ranged + dateSet + count + single-visit), `useByPart`, `useServiceCenters`, `useCustomParts` Supabase embed (`select '*, items:maintenance_items(*)'`) ทำงาน join ใน 1 round-trip
+- ทุก mutation ใน components (`AddMaintenancePage`, `MileageOverlay`, `PartDropdown`, `ServiceCenterDropdown`) ตามด้วย `queryClient.invalidateQueries({ queryKey: [...] })` เพื่อ refresh UI
+- ลบ `DevToolsDock` + `useDriftStatus` + `useOnlineStatus` — ไม่มี queue ให้ kick ไม่มี drift ให้ compare
+- ลบ `dexie` + `dexie-react-hooks` จาก `package.json`
+- `main.tsx` เหลือแค่ QueryClientProvider + RouterProvider — ไม่มี `installFlushListeners` / `probeSchema` / `pullAll` / `scheduleFlush` อะไรอีก
+
+**Trade-off ที่ honest:**
+- **เสีย offline** — ตัด net แล้ว user เขียนไม่ได้ อ่านได้แค่ที่ React Query cached
+- **เสียความเร็ว read บางจังหวะ** — network round-trip แทน IndexedDB read
+- **ได้ความถูกต้อง** — Supabase เป็น single source of truth duplicate ที่ทำเอง (เช่น double-tap save) ยังเป็นไปได้ แต่ resurrection / drift / dead-lock / race ที่มาจาก 2-layer storage หายหมด
+- **ลด maintenance burden** ~1500 LOC ของ sync infrastructure หายไป
+
+Pushed `<commit hash จะเติมหลัง push>`.
+
+---

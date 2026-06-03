@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
 import MaintenanceCardList from '@/components/MaintenanceCardList';
 import MileageOverlay from '@/components/MileageOverlay';
@@ -7,8 +7,6 @@ import Spinner from '@/components/Spinner';
 import { useSession } from '@/lib/supabase/session';
 import { useVehicle } from '@/hooks/useVehicle';
 import { supabase } from '@/lib/supabase/client';
-import { pullAll } from '@/lib/sync/pull';
-import { scheduleFlush } from '@/lib/sync/flush';
 
 // Code-split the 3D viewer so /login + non-dashboard routes don't pay the cost.
 const CarViewer = lazy(() => import('@/three/CarViewer'));
@@ -17,17 +15,6 @@ export default function DashboardPage() {
   const session = useSession();
   const userId = session?.user.id;
   const vehicle = useVehicle(userId);
-
-  // Defensive refresh: every dashboard mount triggers a pull and queue
-  // flush. If the initial pull at app boot failed (network blip,
-  // expired token, server cold start), the user has a path back to
-  // good data just by navigating to "/". Cheap — pull is a delta query
-  // and a no-op when there's nothing newer.
-  useEffect(() => {
-    if (!userId) return;
-    pullAll().catch((e) => console.error('[pull] dashboard mount failed', e));
-    scheduleFlush();
-  }, [userId]);
 
   return (
     <AppShell>

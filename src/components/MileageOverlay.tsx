@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { updateMileage } from '@/lib/sync/repository';
+import { useQueryClient } from '@tanstack/react-query';
+import { updateMileage } from '@/lib/api';
+import { VEHICLE_QK } from '@/hooks/useVehicle';
+import { useSession } from '@/lib/supabase/session';
 
 interface Props {
   vehicleId: string;
@@ -13,6 +16,9 @@ const fmt = (n: number) => n.toLocaleString('th-TH');
  * card. Dark ink colour because the viewer background is white.
  */
 export default function MileageOverlay({ vehicleId, mileage }: Props) {
+  const queryClient = useQueryClient();
+  const session = useSession();
+  const userId = session?.user.id;
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(mileage));
 
@@ -20,6 +26,7 @@ export default function MileageOverlay({ vehicleId, mileage }: Props) {
     const n = Number(value.replace(/[^\d]/g, ''));
     if (Number.isFinite(n) && n >= 0 && n !== mileage) {
       await updateMileage(vehicleId, n);
+      await queryClient.invalidateQueries({ queryKey: VEHICLE_QK(userId) });
     } else {
       setValue(String(mileage));
     }

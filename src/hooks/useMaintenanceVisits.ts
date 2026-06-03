@@ -1,54 +1,91 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/lib/sync/db';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/client';
+import type {
+  MaintenanceItemRow,
+  MaintenanceVisitRow,
+  ServiceCenterRow,
+} from '@/types/db';
 import type { MaintenanceVisitWithItems } from '@/types/domain';
-import type { MaintenanceItemRow, MaintenanceVisitRow, ServiceCenterRow } from '@/types/db';
-
-const hydrate = (
-  v: MaintenanceVisitRow,
-  items: MaintenanceItemRow[],
-  centers: Map<string, ServiceCenterRow>,
-): MaintenanceVisitWithItems => ({
-  ...v,
-  items,
-  service_center: v.service_center_id ? (centers.get(v.service_center_id) ?? null) : null,
-  total_amount: items.reduce((s, i) => s + Number(i.total_price ?? 0), 0),
-});
 
 /**
- * All of a user's visits, newest first, with items + center hydrated.
- * Pass `limit` to cap (e.g. 5 on the dashboard).
+ * Server-direct visit hooks. Replaces the Dexie + useLiveQuery layer.
+ *
+ * Mutations in `src/lib/api.ts` must call
+ * `queryClient.invalidateQueries({ queryKey: ['visits', userId] })`
+ * (and ['vehicle', userId] for mileage edits, etc.) so the UI refreshes
+ * after a save / delete.
  */
+
+interface VisitWithEmbed extends MaintenanceVisitRow {
+  service_center?: ServiceCenterRow | null;
+  items?: MaintenanceItemRow[];
+}
+
+function hydrateRow(v: VisitWithEmbed): MaintenanceVisitWithItems {
+  const items = v.items ?? [];
+  return {
+    ...(v as MaintenanceVisitRow),
+    items,
+    service_center: v.service_center ?? null,
+    total_amount: items.reduce((s, i) => s + Number(i.total_price ?? 0), 0),
+  };
+}
+
+interface Page {
+  limit?: number;
+  offset?: number;
+}
+
+export const VISITS_QK = (userId: string | undefined) => ['visits', userId];
+
+/** Paginated visit list, newest first. */
 export function useMaintenanceVisits(
   userId: string | undefined,
-  options: { limit?: number; offset?: number } = {},
+  options: Page = {},
 ): MaintenanceVisitWithItems[] {
   const { limit, offset = 0 } = options;
-  const visits = useLiveQuery(
-    async (): Promise<MaintenanceVisitWithItems[]> => {
+  const { data } = useQuery({
+    queryKey: ['visits', userId, 'page', limit ?? 'all', offset],
+    queryFn: async (): Promise<MaintenanceVisitWithItems[]> => {
       if (!userId) return [];
-      let q = db.maintenance_visits.where('user_id').equals(userId);
-      const all = (await q.toArray()).sort((a, b) =>
-        a.service_date < b.service_date ? 1 : a.service_date > b.service_date ? -1 : 0,
-      );
-      const sliced = limit ? all.slice(offset, offset + limit) : all.slice(offset);
-      const visitIds = sliced.map((v) => v.id);
-      const [items, centers] = await Promise.all([
-        db.maintenance_items.where('visit_id').anyOf(visitIds).toArray(),
-        db.service_centers.where('user_id').equals(userId).toArray(),
-      ]);
-      const centerMap = new Map(centers.map((c) => [c.id, c]));
-      const itemsByVisit = new Map<string, MaintenanceItemRow[]>();
-      for (const it of items) {
-        const arr = itemsByVisit.get(it.visit_id) ?? [];
-        arr.push(it);
-        itemsByVisit.set(it.visit_id, arr);
-      }
-      return sliced.map((v) => hydrate(v, itemsByVisit.get(v.id) ?? [], centerMap));
+      let query = supabase
+        .from('maintenance_visits')
+        .select('*, service_center:service_centers(*), items:maintenance_items(*)')
+        .eq('user_id', userId)
+        .order('service_date', { ascending: false });
+      if (limit !== undefined) query = query.range(offset, offset + limit - 1);
+      else if (offset > 0) query = query.range(offset, offset + 999);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data as unknown as VisitWithEmbed[]).map(hydrateRow);
     },
-    [userId, limit, offset],
-    [],
-  );
-  return visits ?? [];
+    enabled: !!userId,
+    staleTime: 10_000,
+  });
+  return data ?? [];
+}
+
+/** Single visit hydrated with items + center — for the edit form. */
+export function useVisitWithItems(
+  visitId: string | undefined,
+): MaintenanceVisitWithItems | null {
+  const { data } = useQuery({
+    queryKey: ['visit', visitId],
+    queryFn: async (): Promise<MaintenanceVisitWithItems | null> => {
+      if (!visitId) return null;
+      const { data, error } = await supabase
+        .from('maintenance_visits')
+        .select('*, service_center:service_centers(*), items:maintenance_items(*)')
+        .eq('id', visitId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return hydrateRow(data as unknown as VisitWithEmbed);
+    },
+    enabled: !!visitId,
+    staleTime: 10_000,
+  });
+  return data ?? null;
 }
 
 /** Visits whose service_date falls in [fromIso, toIso] inclusive. */
@@ -57,30 +94,24 @@ export function useVisitsInRange(
   fromIso: string,
   toIso: string,
 ): MaintenanceVisitWithItems[] {
-  const visits = useLiveQuery(
-    async () => {
+  const { data } = useQuery({
+    queryKey: ['visits', userId, 'range', fromIso, toIso],
+    queryFn: async (): Promise<MaintenanceVisitWithItems[]> => {
       if (!userId) return [];
-      const matched = (await db.maintenance_visits.where('user_id').equals(userId).toArray())
-        .filter((v) => v.service_date >= fromIso && v.service_date <= toIso)
-        .sort((a, b) => (a.service_date < b.service_date ? 1 : -1));
-      const visitIds = matched.map((v) => v.id);
-      const [items, centers] = await Promise.all([
-        db.maintenance_items.where('visit_id').anyOf(visitIds).toArray(),
-        db.service_centers.where('user_id').equals(userId).toArray(),
-      ]);
-      const centerMap = new Map(centers.map((c) => [c.id, c]));
-      const itemsByVisit = new Map<string, MaintenanceItemRow[]>();
-      for (const it of items) {
-        const arr = itemsByVisit.get(it.visit_id) ?? [];
-        arr.push(it);
-        itemsByVisit.set(it.visit_id, arr);
-      }
-      return matched.map((v) => hydrate(v, itemsByVisit.get(v.id) ?? [], centerMap));
+      const { data, error } = await supabase
+        .from('maintenance_visits')
+        .select('*, service_center:service_centers(*), items:maintenance_items(*)')
+        .eq('user_id', userId)
+        .gte('service_date', fromIso)
+        .lte('service_date', toIso)
+        .order('service_date', { ascending: false });
+      if (error) throw error;
+      return (data as unknown as VisitWithEmbed[]).map(hydrateRow);
     },
-    [userId, fromIso, toIso],
-    [],
-  );
-  return visits ?? [];
+    enabled: !!userId,
+    staleTime: 10_000,
+  });
+  return data ?? [];
 }
 
 /** Just the set of dates with at least one visit in [from, to]. */
@@ -89,59 +120,41 @@ export function useVisitDateSet(
   fromIso: string,
   toIso: string,
 ): Set<string> {
-  const dates = useLiveQuery(
-    async () => {
+  const { data } = useQuery({
+    queryKey: ['visit-dates', userId, fromIso, toIso],
+    queryFn: async (): Promise<Set<string>> => {
       if (!userId) return new Set<string>();
-      const rows = await db.maintenance_visits.where('user_id').equals(userId).toArray();
-      const s = new Set<string>();
-      for (const r of rows) {
-        if (r.service_date >= fromIso && r.service_date <= toIso) s.add(r.service_date);
-      }
-      return s;
+      const { data, error } = await supabase
+        .from('maintenance_visits')
+        .select('service_date')
+        .eq('user_id', userId)
+        .gte('service_date', fromIso)
+        .lte('service_date', toIso);
+      if (error) throw error;
+      const out = new Set<string>();
+      for (const r of data as { service_date: string }[]) out.add(r.service_date);
+      return out;
     },
-    [userId, fromIso, toIso],
-    new Set<string>(),
-  );
-  return dates ?? new Set<string>();
-}
-
-/** Single visit hydrated with its items + center — for the edit form. */
-export function useVisitWithItems(
-  visitId: string | undefined,
-): MaintenanceVisitWithItems | null {
-  const value = useLiveQuery(
-    async (): Promise<MaintenanceVisitWithItems | null> => {
-      if (!visitId) return null;
-      const visit = await db.maintenance_visits.get(visitId);
-      if (!visit) return null;
-      const [items, center] = await Promise.all([
-        db.maintenance_items.where('visit_id').equals(visitId).toArray(),
-        visit.service_center_id
-          ? db.service_centers.get(visit.service_center_id)
-          : Promise.resolve(undefined),
-      ]);
-      return {
-        ...visit,
-        items,
-        service_center: center ?? null,
-        total_amount: items.reduce((s, i) => s + Number(i.total_price ?? 0), 0),
-      };
-    },
-    [visitId],
-    null,
-  );
-  return value ?? null;
+    enabled: !!userId,
+    staleTime: 10_000,
+  });
+  return data ?? new Set<string>();
 }
 
 export function useVisitCount(userId: string | undefined): number {
-  return (
-    useLiveQuery(
-      async () => {
-        if (!userId) return 0;
-        return db.maintenance_visits.where('user_id').equals(userId).count();
-      },
-      [userId],
-      0,
-    ) ?? 0
-  );
+  const { data } = useQuery({
+    queryKey: ['visit-count', userId],
+    queryFn: async (): Promise<number> => {
+      if (!userId) return 0;
+      const { count, error } = await supabase
+        .from('maintenance_visits')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!userId,
+    staleTime: 10_000,
+  });
+  return data ?? 0;
 }

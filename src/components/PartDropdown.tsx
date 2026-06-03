@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getCategory, type CategoryCode } from '@/lib/categories';
-import { useCustomParts } from '@/hooks/useCustomParts';
-import { insertCustomPart } from '@/lib/sync/repository';
+import { useCustomParts, CUSTOM_PARTS_QK } from '@/hooks/useCustomParts';
+import { insertCustomPart } from '@/lib/api';
 
 interface Props {
   userId: string;
@@ -28,6 +29,7 @@ const OTHER = '__other__';
  *     cancels with "ยกเลิก" / Escape.
  */
 export default function PartDropdown({ userId, categoryCode, value, onChange }: Props) {
+  const queryClient = useQueryClient();
   const cat = getCategory(categoryCode);
   const custom = useCustomParts(userId, categoryCode);
   const [adding, setAdding] = useState(false);
@@ -67,6 +69,7 @@ export default function PartDropdown({ userId, categoryCode, value, onChange }: 
     const name = draft.trim();
     if (!name) return; // stay in editing mode — don't silently dismiss
     await insertCustomPart(userId, categoryCode, name);
+    await queryClient.invalidateQueries({ queryKey: CUSTOM_PARTS_QK(userId, categoryCode) });
     onChange(name);
     setDraft('');
     setAdding(false);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import AppShell from '@/components/AppShell';
 import ThaiDatePicker from '@/components/ThaiDatePicker';
 import ServiceCenterDropdown from '@/components/ServiceCenterDropdown';
@@ -10,7 +11,7 @@ import { useSession } from '@/lib/supabase/session';
 import { useVehicle } from '@/hooks/useVehicle';
 import { useVisitWithItems } from '@/hooks/useMaintenanceVisits';
 import { compressImage } from '@/lib/image';
-import { deleteVisit, insertVisit, updateVisit } from '@/lib/sync/repository';
+import { deleteVisit, insertVisit, updateVisit } from '@/lib/api';
 import { fromLocalIsoDate, toLocalIsoDate } from '@/lib/thai-date';
 import { breakdown } from '@/lib/vat';
 import type { DraftItem } from '@/types/domain';
@@ -28,18 +29,19 @@ const emptyRows = (): Record<CategoryCode, DraftItem[]> => ({
 /**
  * Shared form for /add and /edit/:visitId.
  *
- * - /add               → empty form, calls repository.insertVisit
- * - /edit/:visitId     → pre-filled from Dexie, calls repository.updateVisit
+ * - /add               → empty form, calls `api.insertVisit`
+ * - /edit/:visitId     → pre-filled from Supabase, calls `api.updateVisit`
  *
- * Either way, the page commits through the offline repository façade so all
- * other surfaces (dashboard recent list, history calendar, by-part timeline)
- * pick up the change via useLiveQuery.
+ * After every successful mutation we invalidate the React Query keys that
+ * downstream consumers (dashboard recent list, history calendar, by-part
+ * timeline) subscribe to so the UI refreshes from the server.
  */
 export default function AddMaintenancePage() {
   const session = useSession();
   const userId = session?.user.id;
   const vehicle = useVehicle(userId);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { visitId } = useParams<{ visitId?: string }>();
   const editing = Boolean(visitId);
   const existing = useVisitWithItems(visitId);
@@ -135,8 +137,8 @@ export default function AddMaintenancePage() {
     setError(null);
     try {
       // visitNotes is always defined (empty string means "no note" — the
-      // repository normalises empty → null so the user can clear notes
-      // when editing).
+      // api normalises empty → null so the user can clear notes when
+      // editing).
       if (editing && visitId) {
         await updateVisit(userId, visitId, {
           vehicleId: vehicle.id,
@@ -162,6 +164,14 @@ export default function AddMaintenancePage() {
           receiptMime: receipt?.mime ?? null,
         });
       }
+      // Refresh every list/detail query that could show this visit.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['visits', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['visit-count', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['visit-dates', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['by-part', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['visit', visitId] }),
+      ]);
       navigate('/', { replace: true });
     } catch (err) {
       setError((err as Error).message);
@@ -176,6 +186,12 @@ export default function AddMaintenancePage() {
     setSaving(true);
     try {
       await deleteVisit(visitId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['visits', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['visit-count', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['visit-dates', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['by-part', userId] }),
+      ]);
       navigate('/', { replace: true });
     } finally {
       setSaving(false);

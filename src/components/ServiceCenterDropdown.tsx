@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useServiceCenters } from '@/hooks/useCustomParts';
-import { insertServiceCenter } from '@/lib/sync/repository';
+import { useQueryClient } from '@tanstack/react-query';
+import { useServiceCenters, SERVICE_CENTERS_QK } from '@/hooks/useCustomParts';
+import { insertServiceCenter } from '@/lib/api';
 
 interface Props {
   userId: string;
@@ -16,6 +17,7 @@ const OTHER = '__other__';
  * the comment block there for the iOS rationale.
  */
 export default function ServiceCenterDropdown({ userId, value, onChange }: Props) {
+  const queryClient = useQueryClient();
   const centers = useServiceCenters(userId);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
@@ -41,6 +43,7 @@ export default function ServiceCenterDropdown({ userId, value, onChange }: Props
     const name = draft.trim();
     if (!name) return;
     const row = await insertServiceCenter(userId, name);
+    await queryClient.invalidateQueries({ queryKey: SERVICE_CENTERS_QK(userId) });
     onChange(row.id);
     setDraft('');
     setAdding(false);
