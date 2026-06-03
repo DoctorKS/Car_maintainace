@@ -21,6 +21,13 @@ let scheduled: number | null = null;
 
 const MAX_BACKOFF_MS = 30_000;
 const MIN_BACKOFF_MS = 800;
+/**
+ * Maximum retry attempts before a mutation is moved to dead_letters.
+ * 12 attempts with capped exponential backoff ≈ 5 minutes of real
+ * server hammering — past that, the mutation likely needs human
+ * intervention (schema fix, RLS adjust, etc.). Force-resync resurrects it.
+ */
+const MAX_ATTEMPTS = 12;
 
 const backoffMs = (attempts: number): number =>
   Math.min(MAX_BACKOFF_MS, MIN_BACKOFF_MS * 2 ** Math.max(0, attempts - 1));
@@ -66,11 +73,30 @@ async function drainMutations(): Promise<void> {
       await applyMutation(m);
       await db.pending_mutations.delete(m.id!);
     } catch (err) {
-      const next: PendingMutation = {
-        ...m,
-        attempts: m.attempts + 1,
-        last_error: (err as Error)?.message ?? String(err),
-      };
+      const nextAttempts = m.attempts + 1;
+      const errMsg = (err as Error)?.message ?? String(err);
+
+      if (nextAttempts >= MAX_ATTEMPTS) {
+        // Give up — move to dead_letters so force-resync can revive it later
+        // (or the user can inspect via DevTools).
+        await db.transaction('rw', [db.pending_mutations, db.dead_letters], async () => {
+          await db.dead_letters.add({
+            entity: m.entity,
+            op: m.op,
+            payload: m.payload,
+            attempts: nextAttempts,
+            last_error: errMsg,
+            enqueued_at: m.created_at,
+            dead_lettered_at: Date.now(),
+          });
+          await db.pending_mutations.delete(m.id!);
+        });
+        console.error('[sync] dead-lettered after', nextAttempts, 'attempts:', m.entity, m.op, errMsg);
+        // Keep draining — the next mutation might succeed.
+        continue;
+      }
+
+      const next: PendingMutation = { ...m, attempts: nextAttempts, last_error: errMsg };
       await db.pending_mutations.put(next);
 
       // Surface but don't keep retrying in this tick — let the next trigger

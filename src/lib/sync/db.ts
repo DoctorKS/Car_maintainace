@@ -34,6 +34,20 @@ export interface PendingUpload {
   created_at: number;
 }
 
+/** Mutation that exceeded MAX_ATTEMPTS in flush.ts. */
+export interface DeadLetter {
+  id?: number;
+  entity: EntityName;
+  op: Op;
+  payload: object;
+  attempts: number;
+  last_error: string | null;
+  /** When the mutation first hit the queue. */
+  enqueued_at: number;
+  /** When we gave up and dead-lettered it. */
+  dead_lettered_at: number;
+}
+
 export interface MetaRow {
   key: string;
   value: unknown;
@@ -47,6 +61,7 @@ class AppDB extends Dexie {
   custom_parts!: Table<LocalRow<CustomPartRow>, string>;
   pending_mutations!: Table<PendingMutation, number>;
   pending_uploads!: Table<PendingUpload, number>;
+  dead_letters!: Table<DeadLetter, number>;
   meta!: Table<MetaRow, string>;
 
   constructor() {
@@ -59,6 +74,18 @@ class AppDB extends Dexie {
       custom_parts:       '&id, user_id, [user_id+category_code+part_name], _dirty',
       pending_mutations:  '++id, entity, created_at',
       pending_uploads:    '++id, visit_id, created_at',
+      meta:               '&key',
+    });
+    // v2: add dead_letters for mutations that exceed MAX_ATTEMPTS in flush.
+    this.version(2).stores({
+      vehicles:           '&id, user_id, _dirty',
+      service_centers:    '&id, user_id, name, _dirty',
+      maintenance_visits: '&id, &local_uuid, user_id, service_date, vehicle_id, _dirty',
+      maintenance_items:  '&id, &local_uuid, user_id, visit_id, category_code, part_name, _dirty',
+      custom_parts:       '&id, user_id, [user_id+category_code+part_name], _dirty',
+      pending_mutations:  '++id, entity, created_at',
+      pending_uploads:    '++id, visit_id, created_at',
+      dead_letters:       '++id, entity, dead_lettered_at',
       meta:               '&key',
     });
   }
@@ -78,6 +105,7 @@ export async function clearLocalUserData(): Promise<void> {
       db.custom_parts,
       db.pending_mutations,
       db.pending_uploads,
+      db.dead_letters,
       db.meta,
     ],
     async () => {
@@ -89,6 +117,7 @@ export async function clearLocalUserData(): Promise<void> {
         db.custom_parts.clear(),
         db.pending_mutations.clear(),
         db.pending_uploads.clear(),
+        db.dead_letters.clear(),
         db.meta.clear(),
       ]);
     },

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import DevToolsDock from './DevToolsDock';
 
 interface AppShellProps {
   children: ReactNode;
@@ -9,8 +10,9 @@ interface AppShellProps {
 /**
  * Page wrapper — brand-blue background, safe-area aware.
  *
- * The offline-sync gear (SyncBadge) was removed per user request. The
- * sync queue itself still runs silently via src/lib/sync/flush.ts.
+ * Hosts the DevToolsDock (⬆ resync · ↻ reload · 🩺 drift) at the
+ * bottom-left. The dock self-guards on session: it returns null until
+ * useSession() resolves to a real user, so it never shows on /login.
  */
 export default function AppShell({ children, fullBleed = false }: AppShellProps) {
   return (
@@ -24,6 +26,7 @@ export default function AppShell({ children, fullBleed = false }: AppShellProps)
       <div className={`mx-auto w-full ${fullBleed ? '' : 'max-w-md'} px-4 pt-3 pb-24`}>
         {children}
       </div>
+      <DevToolsDock />
     </div>
   );
 }
