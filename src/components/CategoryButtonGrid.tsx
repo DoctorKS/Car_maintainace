@@ -3,8 +3,9 @@ import { CATEGORIES } from '@/lib/categories';
 import CategoryIcon from './CategoryIcon';
 
 /**
- * 6 interactive buttons (3×2 grid) — one per maintenance category.
- * Route: /by-part/:code
+ * 6 interactive tiles (3×2 grid) — one per maintenance category.
+ * White card on the blue page; PNG icon centered in a soft chip.
+ * Tap → /by-part/:code
  */
 export default function CategoryButtonGrid() {
   return (
@@ -13,10 +14,14 @@ export default function CategoryButtonGrid() {
         <Link
           key={cat.code}
           to={`/by-part/${cat.code}`}
-          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-card bg-primary-700 p-2 text-white shadow-sub transition-transform active:scale-95"
+          className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-tile bg-card p-2 shadow-soft transition-transform active:scale-95"
         >
-          <CategoryIcon code={cat.code} className="h-7 w-7" />
-          <div className="text-center text-[11px] font-medium leading-tight">{cat.titleTh}</div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brandSoft">
+            <CategoryIcon code={cat.code} className="h-10 w-10" />
+          </div>
+          <div className="text-center text-[11px] font-medium leading-tight text-ink">
+            {cat.titleTh}
+          </div>
         </Link>
       ))}
     </div>

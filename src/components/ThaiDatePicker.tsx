@@ -1,6 +1,11 @@
 import { useState } from 'react';
-import ThaiCalendar from './ThaiCalendar';
-import { formatThaiLong, formatThaiShort } from '@/lib/thai-date';
+import CalendarGrid from './CalendarGrid';
+import {
+  formatThaiDateLong,
+  formatThaiShort,
+  nextMonth,
+  prevMonth,
+} from '@/lib/thai-date';
 
 interface Props {
   value: Date | null;
@@ -9,41 +14,43 @@ interface Props {
 }
 
 /**
- * Inline input + popover Thai calendar (no marked dots).
- * Used for "วันที่รับบริการ" on the Add page.
+ * Inline input + collapsible CalendarGrid (no record dots) for picking
+ * "วันที่รับบริการ" on the Add page.
  */
 export default function ThaiDatePicker({ value, onChange, label }: Props) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(value ?? new Date());
+  const selected = value ?? new Date();
 
   return (
     <div>
-      {label && <div className="mb-1 text-xs text-white/70">{label}</div>}
+      {label && <div className="mb-1 text-xs text-white/85">{label}</div>}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full rounded-sub bg-primary-900 px-3 py-2.5 text-left text-sm outline-none"
+        className="w-full rounded-tile bg-white px-3 py-2.5 text-left text-sm text-ink shadow-soft outline-none"
       >
         {value ? (
           <>
-            <span className="font-medium">{formatThaiLong(value)}</span>
-            <span className="ml-2 text-xs text-white/60">({formatThaiShort(value)})</span>
+            <span className="font-semibold">{formatThaiDateLong(value)}</span>
+            <span className="ml-2 text-xs text-sub">({formatThaiShort(value)})</span>
           </>
         ) : (
-          <span className="text-white/60">— เลือกวันที่ —</span>
+          <span className="text-sub">— เลือกวันที่ —</span>
         )}
       </button>
       {open && (
         <div className="mt-2">
-          <ThaiCalendar
+          <CalendarGrid
             month={month}
-            selected={value}
-            markedIso={new Set()}
-            onSelectDate={(d) => {
+            selected={selected}
+            recordDays={new Set()}
+            onSelect={(d) => {
               onChange(d);
               setOpen(false);
             }}
-            onChangeMonth={setMonth}
+            onPrev={() => setMonth((m) => prevMonth(m))}
+            onNext={() => setMonth((m) => nextMonth(m))}
           />
         </div>
       )}

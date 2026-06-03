@@ -38,7 +38,6 @@ export default function AddMaintenancePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Once the vehicle loads, default the mileage field to its current value.
   if (vehicle && mileage === 0) {
     setMileage(vehicle.mileage);
   }
@@ -91,7 +90,7 @@ export default function AddMaintenancePage() {
     return (
       <AppShell>
         <div className="flex h-40 items-center justify-center">
-          <Spinner />
+          <Spinner className="text-white" />
         </div>
       </AppShell>
     );
@@ -100,11 +99,11 @@ export default function AddMaintenancePage() {
   return (
     <AppShell>
       <div className="mb-3 flex items-center justify-between">
-        <Link to="/" className="text-xs text-white/70">
+        <Link to="/" className="text-xs font-medium text-white/90">
           ‹ กลับ
         </Link>
-        <h1 className="text-base font-semibold">เพิ่มข้อมูล maintainance</h1>
-        <label className="cursor-pointer rounded-full bg-primary-600 px-3 py-1.5 text-xs font-semibold shadow-sub active:scale-95">
+        <h1 className="text-base font-semibold text-white">เพิ่มข้อมูล maintainance</h1>
+        <label className="action-pill cursor-pointer">
           + เพิ่มรูปภาพ
           <input
             type="file"
@@ -117,22 +116,22 @@ export default function AddMaintenancePage() {
       </div>
 
       {receipt && (
-        <div className="mb-3 flex items-center gap-3 rounded-card bg-primary-700 p-2 shadow-sub">
+        <div className="mb-3 flex items-center gap-3 rounded-card bg-card p-2 shadow-soft">
           <img
             src={receipt.previewUrl}
             alt="ใบเสร็จ"
-            className="h-16 w-16 rounded-sub object-cover"
+            className="h-16 w-16 rounded-tile object-cover"
           />
           <div className="flex-1 text-xs">
-            <div className="font-medium">แนบรูปใบเสร็จ</div>
-            <div className="text-white/60">
+            <div className="font-semibold text-ink">แนบรูปใบเสร็จ</div>
+            <div className="text-sub">
               {Math.round((receipt.blob.size / 1024) * 10) / 10} KB · {receipt.mime}
             </div>
           </div>
           <button
             type="button"
             onClick={() => setReceipt(null)}
-            className="rounded-sub bg-red-500/80 px-2 py-1 text-xs"
+            className="rounded-tile bg-rose-500/90 px-2 py-1 text-xs font-semibold text-white"
           >
             ลบ
           </button>
@@ -144,18 +143,18 @@ export default function AddMaintenancePage() {
 
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
-            <span className="mb-1 block text-xs text-white/70">เลขไมล์</span>
+            <span className="mb-1 block text-xs text-white/85">เลขไมล์</span>
             <input
               type="number"
               inputMode="numeric"
               min={0}
               value={mileage}
               onChange={(e) => setMileage(Number(e.target.value) || 0)}
-              className="w-full rounded-sub bg-primary-900 px-3 py-2.5 text-sm outline-none"
+              className="w-full rounded-tile bg-white px-3 py-2.5 text-sm text-ink outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
             />
           </label>
           <div>
-            <span className="mb-1 block text-xs text-white/70">ศูนย์บริการ</span>
+            <span className="mb-1 block text-xs text-white/85">ศูนย์บริการ</span>
             <ServiceCenterDropdown userId={userId} value={centerId} onChange={setCenterId} />
           </div>
         </div>
@@ -171,18 +170,20 @@ export default function AddMaintenancePage() {
           />
         ))}
 
-        {error && <div className="rounded-sub bg-red-500/20 p-2 text-xs text-red-100">{error}</div>}
+        {error && (
+          <div className="rounded-tile bg-rose-100 p-2 text-xs text-rose-900">{error}</div>
+        )}
 
-        <div className="sticky bottom-0 -mx-4 mt-4 border-t border-white/10 bg-primary-900/95 px-4 py-3 backdrop-blur">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="text-white/70">รวมทั้งหมด</span>
+        <div className="sticky bottom-0 -mx-4 mt-4 border-t border-white/20 bg-brand/90 px-4 py-3 backdrop-blur">
+          <div className="mb-2 flex items-center justify-between text-sm text-white">
+            <span className="text-white/85">รวมทั้งหมด</span>
             <span className="text-lg font-bold">฿ {totalAmount.toLocaleString('th-TH')}</span>
           </div>
           <button
             type="button"
             onClick={save}
             disabled={saving || allItems.length === 0}
-            className="flex w-full items-center justify-center rounded-card bg-primary-600 px-4 py-3 text-sm font-semibold shadow-card active:scale-95 disabled:opacity-50"
+            className="flex w-full items-center justify-center rounded-card bg-white px-4 py-3 text-sm font-semibold text-brand shadow-card active:scale-95 disabled:opacity-60"
           >
             {saving ? <Spinner /> : `บันทึก ${allItems.length} รายการ`}
           </button>

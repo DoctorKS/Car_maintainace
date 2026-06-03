@@ -1,23 +1,24 @@
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
 import { Suspense } from 'react';
+import * as THREE from 'three';
 import { useCarModel } from './useCarModel';
 
 function CarModel() {
   const model = useCarModel();
-  // primitive lets us drop the loaded scene graph straight into the scene.
   return <primitive object={model} />;
 }
 
 interface CarViewerProps {
   className?: string;
-  /** Auto-rotate the model slowly (for the dashboard idle state). */
+  /** Auto-rotate the model slowly (default true). */
   autoRotate?: boolean;
 }
 
 /**
- * Transparent-background 3D viewer: car body + soft contact shadow.
- * No ground plane, no environment — page navy shows through the canvas.
+ * White-background 3D viewer for the CX-5: black car body + soft contact shadow.
+ * The scene is rendered onto an opaque white background so the card looks like
+ * a flat product shot.
  */
 export default function CarViewer({ className, autoRotate = true }: CarViewerProps) {
   return (
@@ -26,17 +27,21 @@ export default function CarViewer({ className, autoRotate = true }: CarViewerPro
         shadows
         camera={{ position: [4.2, 1.6, 5.0], fov: 32 }}
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true, preserveDrawingBuffer: false }}
+        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false }}
+        onCreated={({ scene, gl }) => {
+          scene.background = new THREE.Color('#ffffff');
+          gl.setClearColor('#ffffff', 1);
+        }}
       >
-        <ambientLight intensity={0.55} />
+        <ambientLight intensity={0.85} />
         <directionalLight
           position={[5, 8, 4]}
-          intensity={1.15}
+          intensity={1.25}
           castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
-        <hemisphereLight color="#a0c4ff" groundColor="#062F66" intensity={0.35} />
+        <hemisphereLight color="#ffffff" groundColor="#dde6f3" intensity={0.6} />
 
         <Suspense fallback={null}>
           <CarModel />
@@ -44,7 +49,7 @@ export default function CarViewer({ className, autoRotate = true }: CarViewerPro
 
         <ContactShadows
           position={[0, -0.01, 0]}
-          opacity={0.55}
+          opacity={0.45}
           blur={2.6}
           far={3.5}
           resolution={512}

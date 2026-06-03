@@ -10,13 +10,13 @@ export default function ReceiptModal({ storagePath, onClose }: Props) {
   const url = useReceiptUrl(storagePath);
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-ink/85 p-4"
       onClick={onClose}
     >
       <button
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 rounded-full bg-white/15 px-3 py-1 text-sm text-white"
+        className="absolute right-4 rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-ink shadow-soft"
         style={{ top: `calc(env(safe-area-inset-top) + 1rem)` }}
       >
         ปิด ✕
@@ -29,7 +29,7 @@ export default function ReceiptModal({ storagePath, onClose }: Props) {
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <Spinner />
+        <Spinner className="text-white" />
       )}
     </div>
   );

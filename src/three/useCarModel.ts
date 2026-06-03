@@ -70,26 +70,26 @@ function applyTextures(root: Object3D, maps: Maps): void {
     if (/tire|tyre|wheel|rubber/.test(name)) {
       mat.map = maps.tireMap;
       mat.normalMap = maps.tireNrm;
-      mat.color.set('#1a1a1a');
+      mat.color.set('#0c0c0c');
       mat.metalness = 0.1;
-      mat.roughness = 0.8;
+      mat.roughness = 0.85;
     } else if (/light|lamp|head|tail|brake/.test(name)) {
       mat.map = maps.lightsMap;
       mat.emissiveMap = maps.lightsMap;
-      mat.emissive.set('#222222');
+      mat.emissive.set('#1a1a1a');
       mat.metalness = 0.6;
       mat.roughness = 0.25;
     } else if (/glass|window|windshield/.test(name)) {
-      mat.color.set('#0a1530');
+      mat.color.set('#1a1a1a');
       mat.metalness = 0.9;
       mat.roughness = 0.05;
       mat.transparent = true;
       mat.opacity = 0.55;
     } else {
-      // Default body paint: navy with a little metallic flake.
-      mat.color.set('#0E68C9');
-      mat.metalness = 0.6;
-      mat.roughness = 0.35;
+      // Default body paint: solid black with subtle metallic flake.
+      mat.color.set('#0a0a0a');
+      mat.metalness = 0.55;
+      mat.roughness = 0.45;
     }
     mat.needsUpdate = true;
     mesh.castShadow = true;

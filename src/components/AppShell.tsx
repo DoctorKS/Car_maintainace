@@ -1,25 +1,29 @@
 import type { ReactNode } from 'react';
-import OfflineBadge from './OfflineBadge';
+import SyncBadge from './SyncBadge';
 
 interface AppShellProps {
   children: ReactNode;
+  /** When true, the inner column hugs the full width (default centred phone). */
+  fullBleed?: boolean;
 }
 
 /**
- * Page wrapper — full-height navy bg, safe-area aware, hosts the OfflineBadge
- * top-right.
+ * Page wrapper — brand-blue background, safe-area aware, hosts the SyncBadge
+ * (top-left).
  */
-export default function AppShell({ children }: AppShellProps) {
+export default function AppShell({ children, fullBleed = false }: AppShellProps) {
   return (
     <div
-      className="min-h-screen bg-primary-900 text-white font-sans antialiased"
+      className="min-h-screen bg-brand text-white"
       style={{
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <OfflineBadge />
-      <div className="mx-auto w-full max-w-md px-4 pt-3 pb-24">{children}</div>
+      <SyncBadge />
+      <div className={`mx-auto w-full ${fullBleed ? '' : 'max-w-md'} px-4 pt-3 pb-24`}>
+        {children}
+      </div>
     </div>
   );
 }

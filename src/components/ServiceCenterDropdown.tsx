@@ -42,7 +42,7 @@ export default function ServiceCenterDropdown({ userId, value, onChange }: Props
           }
         }}
         placeholder="ชื่อศูนย์บริการ..."
-        className="w-full rounded-sub bg-primary-900 px-3 py-2.5 text-sm outline-none ring-2 ring-white/30"
+        className="w-full rounded-tile bg-white px-3 py-2.5 text-sm text-ink outline-none ring-2 ring-brand"
       />
     );
   }
@@ -58,13 +58,12 @@ export default function ServiceCenterDropdown({ userId, value, onChange }: Props
           onChange(e.target.value || null);
         }
       }}
-      className="w-full rounded-sub bg-primary-900 px-3 py-2.5 text-sm text-white outline-none"
+      className="w-full rounded-tile bg-white px-3 py-2.5 text-sm text-ink outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
     >
       <option value="">— เลือกศูนย์บริการ —</option>
       {centers.map((c) => (
         <option key={c.id} value={c.id}>
           {c.name}
-          {c.is_default ? '' : ' ★'}
         </option>
       ))}
       <option value={OTHER}>+ อื่นๆ…</option>

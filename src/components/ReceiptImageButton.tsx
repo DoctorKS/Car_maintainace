@@ -13,7 +13,7 @@ export default function ReceiptImageButton({ storagePath }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-medium text-white backdrop-blur hover:bg-white/25"
+        className="rounded-full bg-brandSoft px-3 py-1 text-[11px] font-semibold text-brand hover:bg-brand/15"
       >
         แสดงรูปที่อัพโหลด
       </button>

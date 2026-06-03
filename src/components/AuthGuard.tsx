@@ -7,10 +7,9 @@ export default function AuthGuard() {
   const location = useLocation();
 
   if (session === undefined) {
-    // initial load
     return (
-      <div className="flex min-h-screen items-center justify-center bg-primary-900">
-        <Spinner />
+      <div className="flex min-h-screen items-center justify-center bg-brand">
+        <Spinner className="text-white" />
       </div>
     );
   }

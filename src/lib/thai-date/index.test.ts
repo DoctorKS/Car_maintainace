@@ -5,9 +5,13 @@ import {
   formatThaiShort,
   formatThaiShortMonth,
   formatThaiMedium,
+  formatThaiDate,
   formatThaiLong,
   formatBEYearShort,
   formatBEYearLong,
+  buildCalendarGrid,
+  dayKey,
+  THAI_WEEKDAYS,
   formatThaiMonthYear,
   toThaiNumerals,
   thaiWeekdayShort,
@@ -114,6 +118,52 @@ describe('Thai date / Buddhist Era', () => {
     it('round-trips ISO', () => {
       const iso = '2024-02-29';
       expect(toLocalIsoDate(fromLocalIsoDate(iso))).toBe(iso);
+    });
+  });
+
+  describe('handoff additions', () => {
+    it('toBE accepts number (handoff overload)', () => {
+      expect(toBE(2026)).toBe(2569);
+      expect(toBE(2000)).toBe(2543);
+    });
+
+    it('formatThaiDate is the medium-form alias', () => {
+      expect(formatThaiDate(new Date(2026, 5, 3))).toBe('3 มิ.ย. 2569');
+    });
+
+    it('dayKey emits YYYY-MM-DD', () => {
+      expect(dayKey(new Date(2026, 5, 3))).toBe('2026-06-03');
+      expect(dayKey(new Date(2026, 0, 1))).toBe('2026-01-01');
+    });
+
+    it('THAI_WEEKDAYS has 7 entries starting Sunday', () => {
+      expect(THAI_WEEKDAYS).toHaveLength(7);
+      expect(THAI_WEEKDAYS[0]).toBe('อา.');
+      expect(THAI_WEEKDAYS[6]).toBe('ส.');
+    });
+  });
+
+  describe('buildCalendarGrid', () => {
+    it('returns 42 cells (6 rows × 7)', () => {
+      expect(buildCalendarGrid(new Date(2026, 5, 1))).toHaveLength(42);
+    });
+
+    it('starts on Sunday; June 2026 begins Mon, so cell[0] = May 31 (out-of-month)', () => {
+      const grid = buildCalendarGrid(new Date(2026, 5, 1));
+      expect(grid[0].date.getDate()).toBe(31);
+      expect(grid[0].inMonth).toBe(false);
+      expect(grid[1].date.getDate()).toBe(1);
+      expect(grid[1].inMonth).toBe(true);
+    });
+
+    it('counts 30 in-month days for June', () => {
+      const grid = buildCalendarGrid(new Date(2026, 5, 1));
+      expect(grid.filter((c) => c.inMonth)).toHaveLength(30);
+    });
+
+    it('counts 29 in-month days for Feb 2024 (leap year)', () => {
+      const grid = buildCalendarGrid(new Date(2024, 1, 1));
+      expect(grid.filter((c) => c.inMonth)).toHaveLength(29);
     });
   });
 });

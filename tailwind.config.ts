@@ -1,52 +1,41 @@
 import type { Config } from 'tailwindcss';
 
+/**
+ * Car Maintenance Tracker — design tokens
+ * โทนฟ้าสด / การ์ดขาว (CARFAX-style)
+ *
+ * Source of truth: handoff/tailwind.config.ts
+ */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        primary: {
-          50:  '#E8F0FA',
-          100: '#CCDDF3',
-          200: '#9BBCE7',
-          300: '#5E92D7',
-          400: '#1E6FC4',
-          500: '#0F65BF',
-          600: '#0E68C9',
-          700: '#0B5FBF', // card bg (matches screenshot)
-          800: '#084D9C', // sub-card (slightly darker)
-          900: '#062F66', // page bg / status bar
-          950: '#031A3D',
-        },
-        accent: {
-          red: '#FF4D4F',
-          gold: '#F5C24C',
-        },
+        brand: '#1668CC', // primary blue — พื้นหลังหน้า
+        brandDeep: '#0F55AD', // เงา/ความลึก
+        brandSoft: '#EAF1FC', // พื้นไอคอน / inner surface
+        line: '#DBE7F8', // เส้นขอบ / วันเดือนอื่น
+        ink: '#13294D', // หัวข้อบนการ์ดขาว
+        sub: '#7186A3', // ข้อความรอง
+        pink: '#EC4D8E', // จุด record / ไฮไลต์เล็ก
+        card: '#FFFFFF',
       },
       fontFamily: {
-        sans: [
-          '"Inter Variable"',
-          '"Inter"',
-          '"IBM Plex Sans Thai"',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'sans-serif',
-        ],
-        thai: ['"IBM Plex Sans Thai"', 'sans-serif'],
-        display: ['"Inter Variable"', '"Inter"', '"IBM Plex Sans Thai"', 'sans-serif'],
+        sans: ['"IBM Plex Sans Thai"', '"IBM Plex Sans"', '"Inter"', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        card: '1.25rem',
-        sub: '0.875rem',
+        tile: '20px',
+        card: '22px',
+        hero: '26px',
       },
       boxShadow: {
-        card: '0 6px 18px rgba(0,0,0,0.25)',
-        sub: '0 2px 8px rgba(0,0,0,0.18)',
+        card: '0 10px 26px rgba(9,38,82,.16)',
+        soft: '0 4px 12px rgba(9,38,82,.10)',
+        today: '0 6px 14px rgba(22,104,204,.4)',
       },
       spacing: {
-        'safe-top': 'env(safe-area-inset-top)',
-        'safe-bottom': 'env(safe-area-inset-bottom)',
+        'safe-t': 'env(safe-area-inset-top)',
+        'safe-b': 'env(safe-area-inset-bottom)',
       },
     },
   },

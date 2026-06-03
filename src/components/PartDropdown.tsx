@@ -14,7 +14,7 @@ const OTHER = '__other__';
 
 /**
  * Select an existing part name OR add a new one via "+ อื่นๆ".
- * Custom additions are persisted to `custom_parts` and reappear in future dropdowns.
+ * Custom additions persist to `custom_parts` and reappear in future dropdowns.
  */
 export default function PartDropdown({ userId, categoryCode, value, onChange }: Props) {
   const cat = getCategory(categoryCode);
@@ -61,7 +61,7 @@ export default function PartDropdown({ userId, categoryCode, value, onChange }: 
           }
         }}
         placeholder="พิมพ์ชื่ออะไหล่..."
-        className="min-w-0 flex-1 rounded-sub bg-primary-900 px-2 py-2 text-sm outline-none ring-2 ring-white/30"
+        className="min-w-0 flex-1 rounded-tile bg-white px-2 py-2 text-sm text-ink outline-none ring-2 ring-brand"
       />
     );
   }
@@ -77,7 +77,7 @@ export default function PartDropdown({ userId, categoryCode, value, onChange }: 
           onChange(e.target.value);
         }
       }}
-      className="min-w-0 flex-1 rounded-sub bg-primary-900 px-2 py-2 text-sm text-white outline-none"
+      className="min-w-0 flex-1 rounded-tile bg-white px-2 py-2 text-sm text-ink outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
     >
       <option value="">— เลือกอะไหล่ —</option>
       {options.map((p) => (

@@ -26,6 +26,9 @@ build/
 Thumbs.db
 desktop.ini
 
+# Stray archives
+*.zip
+
 # Claude Code user-local overrides
 .claude/settings.local.json
 

@@ -9,7 +9,7 @@ interface Props {
 
 /**
  * Paged list of maintenance visits — newest first.
- * "Next page" arrow on the bottom-right wraps back to page 0 at the end.
+ * Bottom-right "next" pill wraps back to page 0 at the end.
  */
 export default function MaintenanceCardList({ userId, pageSize = 5 }: Props) {
   const page = useUiStore((s) => s.dashboardPage);
@@ -24,8 +24,9 @@ export default function MaintenanceCardList({ userId, pageSize = 5 }: Props) {
 
   if (total === 0) {
     return (
-      <div className="rounded-card bg-primary-700/60 p-6 text-center text-sm text-white/70">
-        ยังไม่มีบันทึก — กด <span className="font-semibold text-white">+ เพิ่มข้อมูล</span> เพื่อเริ่มต้น
+      <div className="rounded-card bg-card p-6 text-center text-sm text-sub shadow-soft">
+        ยังไม่มีบันทึก — กด{' '}
+        <span className="font-semibold text-brand">+ เพิ่มข้อมูล</span> เพื่อเริ่มต้น
       </div>
     );
   }
@@ -38,16 +39,16 @@ export default function MaintenanceCardList({ userId, pageSize = 5 }: Props) {
         ))}
       </div>
       {total > pageSize && (
-        <div className="mt-3 flex items-center justify-between text-xs text-white/70">
+        <div className="mt-3 flex items-center justify-between text-xs text-white/80">
           <div>
             หน้า {page + 1} / {totalPages}
           </div>
           <button
             type="button"
             onClick={hasNext ? nextPage : reset}
-            className="flex items-center gap-1 rounded-full bg-primary-700 px-3 py-1.5 font-medium text-white shadow-sub active:scale-95"
+            className="action-pill"
           >
-            {hasNext ? 'ถัดไป' : 'กลับต้น'} →
+            {hasNext ? 'ถัดไป →' : '← กลับต้น'}
           </button>
         </div>
       )}

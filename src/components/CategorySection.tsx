@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { getCategory, type CategoryCode } from '@/lib/categories';
 import type { DraftItem } from '@/types/domain';
 import PartDropdown from './PartDropdown';
+import CategoryIcon from './CategoryIcon';
 
 interface Props {
   userId: string;
@@ -28,31 +29,37 @@ export default function CategorySection({ userId, categoryCode, items, onChange 
   const remove = (idx: number) => onChange(items.filter((_, i) => i !== idx));
 
   return (
-    <section className="rounded-card bg-primary-700 p-3 shadow-sub">
+    <section className="rounded-card bg-card p-3 shadow-soft">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{cat.emoji}</span>
-          <div>
-            <div className="text-sm font-semibold">หมวด {cat.code}: {cat.titleTh}</div>
-            <div className="text-[10px] text-white/60">{cat.titleEn}</div>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brandSoft">
+            <CategoryIcon code={cat.code} className="h-8 w-8" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-ink">
+              หมวด {cat.code}: {cat.titleTh}
+            </div>
+            <div className="text-[10px] text-sub">{cat.titleEn}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-white/70">
+        <div className="flex items-center gap-2 text-xs text-sub">
           {items.length > 0 && (
-            <span className="rounded-full bg-primary-900/40 px-2 py-0.5">{items.length}</span>
+            <span className="rounded-full bg-brandSoft px-2 py-0.5 font-medium text-brand">
+              {items.length}
+            </span>
           )}
-          <span>{open ? '▾' : '▸'}</span>
+          <span className="text-base text-brand">{open ? '▾' : '▸'}</span>
         </div>
       </button>
 
       {open && (
         <div className="mt-3 space-y-2">
           {items.map((it, idx) => (
-            <div key={idx} className="rounded-sub bg-primary-800 p-2">
+            <div key={idx} className="rounded-tile bg-brandSoft p-2">
               <div className="flex gap-2">
                 <PartDropdown
                   userId={userId}
@@ -63,7 +70,7 @@ export default function CategorySection({ userId, categoryCode, items, onChange 
                 <button
                   type="button"
                   onClick={() => remove(idx)}
-                  className="rounded-sub bg-red-500/80 px-2 text-sm text-white"
+                  className="rounded-tile bg-rose-500/90 px-2 text-sm font-semibold text-white"
                   aria-label="ลบรายการ"
                 >
                   ✕
@@ -71,31 +78,27 @@ export default function CategorySection({ userId, categoryCode, items, onChange 
               </div>
               <div className="mt-2 flex items-center gap-2 text-xs">
                 <label className="flex flex-1 items-center gap-2">
-                  <span className="text-white/70">จำนวน</span>
+                  <span className="text-sub">จำนวน</span>
                   <input
                     type="number"
                     inputMode="decimal"
                     min={0}
                     step="0.01"
                     value={it.quantity}
-                    onChange={(e) =>
-                      update(idx, { quantity: Number(e.target.value) || 0 })
-                    }
-                    className="w-16 rounded-sub bg-primary-900 px-2 py-1.5 text-right outline-none"
+                    onChange={(e) => update(idx, { quantity: Number(e.target.value) || 0 })}
+                    className="w-16 rounded-tile bg-white px-2 py-1.5 text-right text-ink outline-none ring-1 ring-line"
                   />
                 </label>
                 <label className="flex flex-1 items-center gap-2">
-                  <span className="text-white/70">ราคา</span>
+                  <span className="text-sub">ราคา</span>
                   <input
                     type="number"
                     inputMode="decimal"
                     min={0}
                     step="0.01"
                     value={it.totalPrice}
-                    onChange={(e) =>
-                      update(idx, { totalPrice: Number(e.target.value) || 0 })
-                    }
-                    className="w-24 rounded-sub bg-primary-900 px-2 py-1.5 text-right outline-none"
+                    onChange={(e) => update(idx, { totalPrice: Number(e.target.value) || 0 })}
+                    className="w-24 rounded-tile bg-white px-2 py-1.5 text-right text-ink outline-none ring-1 ring-line"
                   />
                 </label>
               </div>
@@ -104,7 +107,7 @@ export default function CategorySection({ userId, categoryCode, items, onChange 
           <button
             type="button"
             onClick={add}
-            className="w-full rounded-sub border border-dashed border-white/30 px-3 py-2 text-xs text-white/80 hover:bg-white/5"
+            className="w-full rounded-tile border border-dashed border-line px-3 py-2 text-xs font-medium text-brand hover:bg-brandSoft"
           >
             + เพิ่มชิ้นในหมวดนี้
           </button>

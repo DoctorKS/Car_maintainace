@@ -28,8 +28,8 @@ export default defineConfig({
         description: 'ตาราง maintainance CX-5 2016 ขข4699',
         lang: 'th',
         display: 'standalone',
-        background_color: '#062F66',
-        theme_color: '#062F66',
+        background_color: '#1668CC',
+        theme_color: '#1668CC',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
@@ -92,5 +92,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    exclude: ['node_modules/**', 'dist/**', 'handoff/**'],
   },
 });

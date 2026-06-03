@@ -1,11 +1,30 @@
 /**
  * Thai date / Buddhist Era (พุทธศักราช) utilities.
  *
- * Buddhist year = Gregorian year + 543.
+ *   Buddhist year = Gregorian year + 543.
  *   e.g. 2026 CE → 2569 BE.
  *
- * All formatters take a `Date` (local time) and return strings safe for UI.
+ * Merge of two sources:
+ *   - the original handwritten adapter (Date-based formatters + ISO helpers)
+ *   - the handoff/ adapter (calendar grid + number-based toBE + dayKey)
+ *
+ * Both stay exported to keep all existing imports working.
  */
+
+import {
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  addMonths,
+  subMonths,
+  isSameDay,
+  isSameMonth,
+  format,
+} from 'date-fns';
+
+export const BE_OFFSET = 543;
 
 const THAI_MONTHS_FULL = [
   'มกราคม',
@@ -48,13 +67,24 @@ const THAI_WEEKDAYS_FULL = [
   'เสาร์',
 ] as const;
 
+/** Alias matching the handoff/ name. */
+export const THAI_WEEKDAYS = THAI_WEEKDAYS_SHORT;
+
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-/** Convert a Gregorian year to Buddhist Era. */
-export const toBE = (d: Date): number => d.getFullYear() + 543;
+/**
+ * Convert to BE. Overloaded: accepts a `Date` (returns BE year) or a number
+ * (returns number + 543). The Date variant is what the original code used;
+ * the number variant matches the handoff adapter's signature.
+ */
+export function toBE(input: Date): number;
+export function toBE(input: number): number;
+export function toBE(input: Date | number): number {
+  return typeof input === 'number' ? input + BE_OFFSET : input.getFullYear() + BE_OFFSET;
+}
 
 /** Convert a BE year back to Gregorian. */
-export const fromBE = (beYear: number): number => beYear - 543;
+export const fromBE = (beYear: number): number => beYear - BE_OFFSET;
 
 /** "03/06/2569" — DD/MM/พ.ศ. */
 export const formatThaiShort = (d: Date): string =>
@@ -68,6 +98,13 @@ export const formatThaiShortMonth = (d: Date): string =>
 export const formatThaiMedium = (d: Date): string =>
   `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]} ${toBE(d)}`;
 
+/** Handoff alias for the medium form. */
+export const formatThaiDate = formatThaiMedium;
+
+/** "3 มิถุนายน 2569" */
+export const formatThaiDateLong = (d: Date): string =>
+  `${d.getDate()} ${THAI_MONTHS_FULL[d.getMonth()]} ${toBE(d)}`;
+
 /** "3 มิถุนายน พุทธศักราช 2569" — long. */
 export const formatThaiLong = (d: Date): string =>
   `${d.getDate()} ${THAI_MONTHS_FULL[d.getMonth()]} พุทธศักราช ${toBE(d)}`;
@@ -78,7 +115,7 @@ export const formatBEYearShort = (d: Date): string => `พ.ศ. ${toBE(d)}`;
 /** "พุทธศักราช 2569" */
 export const formatBEYearLong = (d: Date): string => `พุทธศักราช ${toBE(d)}`;
 
-/** "มิถุนายน 2569" — month-and-year caption for calendar headers. */
+/** "มิถุนายน 2569" — caption used by calendar headers. */
 export const formatThaiMonthYear = (d: Date): string =>
   `${THAI_MONTHS_FULL[d.getMonth()]} ${toBE(d)}`;
 
@@ -86,7 +123,6 @@ export const formatThaiMonthYear = (d: Date): string =>
 export const toThaiNumerals = (s: string | number): string =>
   String(s).replace(/\d/g, (c) => '๐๑๒๓๔๕๖๗๘๙'[Number(c)]);
 
-/** Day-of-week abbreviation (Sun → "อา.") */
 export const thaiWeekdayShort = (d: Date): string => THAI_WEEKDAYS_SHORT[d.getDay()];
 export const thaiWeekdayLong = (d: Date): string => THAI_WEEKDAYS_FULL[d.getDay()];
 
@@ -109,3 +145,48 @@ export const fromLocalIsoDate = (iso: string): Date => {
   const [y, m, day] = iso.split('-').map(Number);
   return new Date(y, m - 1, day);
 };
+
+// ---------------------------------------------------------------------------
+// Calendar grid (from handoff)
+// ---------------------------------------------------------------------------
+
+/** `2026-06-03` — key for grouping records by day. */
+export const dayKey = (date: Date): string => format(date, 'yyyy-MM-dd');
+
+export interface CalendarCell {
+  date: Date;
+  inMonth: boolean;
+  key: string;
+}
+
+/**
+ * Build a 6×7 = 42-cell calendar grid for `month`, starting Sunday.
+ *
+ * Cells outside `month` carry `inMonth = false` so the renderer can fade them.
+ * We always pad to exactly 42 cells (6 rows) so the calendar height stays
+ * stable month-to-month — months that fit in 5 (or even 4) weeks get extra
+ * out-of-month rows tacked on the end.
+ */
+export function buildCalendarGrid(month: Date): CalendarCell[] {
+  const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 0 });
+  const gridEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 0 });
+  const cells = eachDayOfInterval({ start: gridStart, end: gridEnd }).map((date) => ({
+    date,
+    inMonth: isSameMonth(date, month),
+    key: dayKey(date),
+  }));
+  // Pad to a full 6×7 grid by extending one day at a time from the last cell.
+  while (cells.length < 42) {
+    const last = cells[cells.length - 1].date;
+    const next = new Date(last);
+    next.setDate(next.getDate() + 1);
+    cells.push({ date: next, inMonth: isSameMonth(next, month), key: dayKey(next) });
+  }
+  return cells;
+}
+
+export const nextMonth = (d: Date): Date => addMonths(d, 1);
+export const prevMonth = (d: Date): Date => subMonths(d, 1);
+export const isToday = (d: Date): boolean => isSameDay(d, new Date());
+
+export { isSameDay, isSameMonth };
