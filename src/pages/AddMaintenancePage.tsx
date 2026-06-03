@@ -12,8 +12,10 @@ import { useVehicle } from '@/hooks/useVehicle';
 import { useVisitWithItems } from '@/hooks/useMaintenanceVisits';
 import { compressImage } from '@/lib/image';
 import { deleteVisit, insertVisit, updateVisit } from '@/lib/api';
+import { ocrReceipt, type OcrItem } from '@/lib/ocr';
 import { fromLocalIsoDate, toLocalIsoDate } from '@/lib/thai-date';
 import { breakdown } from '@/lib/vat';
+import OcrReview from '@/components/OcrReview';
 import type { DraftItem } from '@/types/domain';
 
 const emptyRows = (): Record<CategoryCode, DraftItem[]> => ({
@@ -58,6 +60,11 @@ export default function AddMaintenancePage() {
   const [isScheduled, setIsScheduled] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // OCR state
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrItems, setOcrItems] = useState<OcrItem[] | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
 
   // Reset hydration flags when the route param changes so navigating
   // /add → /edit/X → /edit/Y (without a full reload) re-seeds the form
@@ -118,6 +125,46 @@ export default function AddMaintenancePage() {
       console.warn('[image] compress failed, using original', err);
       setReceipt({ blob: f, mime: f.type, previewUrl: URL.createObjectURL(f) });
     }
+  };
+
+  /**
+   * Read the items off the attached receipt via Claude vision (Supabase
+   * Edge Function proxy). On success, open the OcrReview modal which
+   * lets the user assign categories and edit before merging into the
+   * form's `rows` state.
+   */
+  const runOcr = async () => {
+    if (!receipt || ocrLoading) return;
+    setOcrError(null);
+    setOcrLoading(true);
+    try {
+      const items = await ocrReceipt(receipt.blob);
+      if (items.length === 0) {
+        setOcrError('ไม่พบรายการในใบเสร็จ — ลองถ่ายใหม่ให้ชัดกว่าเดิม');
+      }
+      setOcrItems(items); // open the review modal even on empty so user can add manually
+    } catch (e) {
+      setOcrError((e as Error).message);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  /**
+   * Called by OcrReview when the user taps "บันทึก" inside the modal.
+   * Each committed item already carries a categoryCode; merge into the
+   * matching `rows[code]` array so the user can still tweak before the
+   * outer save.
+   */
+  const handleOcrCommit = (committed: DraftItem[]) => {
+    setRows((s) => {
+      const next: Record<CategoryCode, DraftItem[]> = { ...s };
+      for (const it of committed) {
+        next[it.categoryCode] = [...next[it.categoryCode], it];
+      }
+      return next;
+    });
+    setOcrItems(null);
   };
 
   const allItems: DraftItem[] = (Object.keys(rows) as unknown as CategoryCode[])
@@ -230,25 +277,43 @@ export default function AddMaintenancePage() {
       </div>
 
       {receipt && (
-        <div className="mb-3 flex items-center gap-3 rounded-card bg-card p-2">
-          <img
-            src={receipt.previewUrl}
-            alt="ใบเสร็จ"
-            className="h-16 w-16 rounded-tile object-cover"
-          />
-          <div className="flex-1 text-xs">
-            <div className="font-semibold text-ink">แนบรูปใบเสร็จ</div>
-            <div className="text-sub">
-              {Math.round((receipt.blob.size / 1024) * 10) / 10} KB · {receipt.mime}
+        <div className="mb-3 rounded-card bg-card p-2">
+          <div className="flex items-center gap-3">
+            <img
+              src={receipt.previewUrl}
+              alt="ใบเสร็จ"
+              className="h-16 w-16 rounded-tile object-cover"
+            />
+            <div className="flex-1 text-xs">
+              <div className="font-semibold text-ink">แนบรูปใบเสร็จ</div>
+              <div className="text-sub">
+                {Math.round((receipt.blob.size / 1024) * 10) / 10} KB · {receipt.mime}
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setReceipt(null)}
+              className="rounded-tile bg-rose-500/90 px-2 py-1 text-xs font-semibold text-white"
+            >
+              ลบ
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setReceipt(null)}
-            className="rounded-tile bg-rose-500/90 px-2 py-1 text-xs font-semibold text-white"
-          >
-            ลบ
-          </button>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={runOcr}
+              disabled={ocrLoading}
+              className="flex flex-1 items-center justify-center gap-2 rounded-tile bg-brand px-3 py-2 text-xs font-semibold text-white shadow-soft active:scale-95 disabled:opacity-60"
+            >
+              {ocrLoading ? <Spinner className="h-4 w-4 text-white" /> : <span>🔍</span>}
+              <span>{ocrLoading ? 'กำลังอ่าน...' : 'อ่านข้อมูลจากรูป (OCR)'}</span>
+            </button>
+          </div>
+          {ocrError && (
+            <div className="mt-2 rounded-tile bg-rose-100 px-2 py-1.5 text-[11px] text-rose-900">
+              {ocrError}
+            </div>
+          )}
         </div>
       )}
       {editing && !receipt && keepExistingReceiptPath && (
@@ -362,6 +427,14 @@ export default function AddMaintenancePage() {
           </button>
         </div>
       </div>
+
+      {ocrItems !== null && (
+        <OcrReview
+          items={ocrItems}
+          onSave={handleOcrCommit}
+          onCancel={() => setOcrItems(null)}
+        />
+      )}
     </AppShell>
   );
 }

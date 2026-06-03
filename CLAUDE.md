@@ -82,6 +82,7 @@ history before `df2703b` to see what was removed.
 | 6 categories + seed parts | [`src/lib/categories.ts`](src/lib/categories.ts) |
 | Buddhist Era / Thai formatters (+ tests) | [`src/lib/thai-date/index.ts`](src/lib/thai-date/index.ts), [`index.test.ts`](src/lib/thai-date/index.test.ts) — 24 tests |
 | 3D viewer (lazy-loaded) | [`src/three/CarViewer.tsx`](src/three/CarViewer.tsx), [`useCarModel.ts`](src/three/useCarModel.ts) |
+| Receipt OCR (Claude vision via Edge Function) | [`src/lib/ocr.ts`](src/lib/ocr.ts), [`src/components/OcrReview.tsx`](src/components/OcrReview.tsx), [`supabase/functions/ocr-receipt/index.ts`](supabase/functions/ocr-receipt/index.ts) |
 | Calendar | [`src/components/CalendarGrid.tsx`](src/components/CalendarGrid.tsx) |
 | Supabase schema | [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) + 0002 (item notes) + 0003 (is_scheduled) + 0004 (engine category) |
 
@@ -119,6 +120,7 @@ npm run preview       # serve dist/ for local check
 ## Known gotchas
 
 - **All migrations must be applied to the live Supabase project** in order. Without 0002 the per-item `notes` insert fails with PGRST 42703; without 0003 the `is_scheduled` insert fails; without 0004 inserts with `category_code = 6` (Engine) hit the old `1..6` constraint where 6 means "อื่นๆ".
+- **OCR requires a deployed edge function + secret.** `supabase functions deploy ocr-receipt` then `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`. The browser calls `supabase.functions.invoke('ocr-receipt', { body: { imageBase64, mimeType } })`; the function proxies to Claude vision. The Anthropic key never reaches the bundle.
 - **No offline support.** If a user is on the subway the form throws on save. We could re-add `useMutation` with retry, but explicit error is the current contract.
 - **FBX mesh names** — `useCarModel.ts` maps textures by mesh-name substring. If the FBX is replaced, run the inspection snippet in [`src/three/inspect-fbx.md`](src/three/inspect-fbx.md).
 - **iOS Safari + `autoFocus`** — async-mounted inputs (after `<select>` picker close) won't receive autoFocus. Use `useRef` + `useEffect(() => inputRef.focus(), [active])`. See `PartDropdown` / `ServiceCenterDropdown` for the pattern.
