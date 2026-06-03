@@ -99,6 +99,11 @@ export default function MaintenanceCard({ visit }: Props) {
                   ฿ {baht(Number(it.total_price))}
                 </div>
               </div>
+              {it.notes && it.notes.trim() && (
+                <div className="mt-1 whitespace-pre-wrap rounded-md bg-white/60 px-2 py-1 text-[11px] italic leading-snug text-sub">
+                  📝 {it.notes}
+                </div>
+              )}
             </div>
           );
         })}

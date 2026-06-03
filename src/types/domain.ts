@@ -13,12 +13,22 @@ export interface MaintenanceVisitWithItems extends MaintenanceVisitRow {
   total_amount: number;
 }
 
-/** Single row in an Add-form: { partName, qty, total }. */
+/**
+ * Single row in the Add/Edit form.
+ *
+ * `unitPrice` is form-only — what the user types in "ราคา/ชิ้น".
+ * `totalPrice` is what the DB stores (= quantity × unitPrice, also
+ * displayed in the "ราคารวม" field). When loading an existing visit, we
+ * back-compute `unitPrice` from `totalPrice / quantity` so the form
+ * round-trips cleanly.
+ */
 export interface DraftItem {
   categoryCode: CategoryCode;
   partName: string;
   quantity: number;
+  unitPrice: number;
   totalPrice: number;
+  notes?: string;
 }
 
 /** Payload for `repository.insertVisit`. */

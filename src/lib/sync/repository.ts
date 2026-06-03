@@ -120,6 +120,7 @@ export async function insertVisit(
     part_name: d.partName,
     quantity: d.quantity,
     total_price: d.totalPrice,
+    notes: d.notes?.trim() ? d.notes.trim() : null,
     created_at: created,
   }));
 
@@ -197,6 +198,7 @@ export async function updateVisit(
     part_name: d.partName,
     quantity: d.quantity,
     total_price: d.totalPrice,
+    notes: d.notes?.trim() ? d.notes.trim() : null,
     created_at: updated_at,
   }));
 

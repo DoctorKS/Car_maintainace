@@ -73,11 +73,16 @@ export default function AddMaintenancePage() {
     const next = emptyRows();
     for (const it of existing.items) {
       if (!isCategoryCode(it.category_code)) continue;
+      const qty = Number(it.quantity ?? 1);
+      const total = Number(it.total_price ?? 0);
       next[it.category_code].push({
         categoryCode: it.category_code,
         partName: it.part_name,
-        quantity: Number(it.quantity ?? 1),
-        totalPrice: Number(it.total_price ?? 0),
+        quantity: qty,
+        // Back-derive unit price so the form round-trips cleanly.
+        unitPrice: qty > 0 ? Math.round((total / qty) * 100) / 100 : 0,
+        totalPrice: total,
+        notes: it.notes ?? '',
       });
     }
     setRows(next);

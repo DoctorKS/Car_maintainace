@@ -50,6 +50,8 @@ export interface MaintenanceItemRow {
   part_name: string;
   quantity: number;
   total_price: number;
+  /** Per-item note. Added by 0002_item_notes.sql; null on rows created before. */
+  notes: string | null;
   created_at: string;
 }
 
