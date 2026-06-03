@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AddMaintenancePage from './pages/AddMaintenancePage';
 import HistoryCalendarPage from './pages/HistoryCalendarPage';
+import ByPartIndexPage from './pages/ByPartIndexPage';
 import ByPartPage from './pages/ByPartPage';
 
 export const router = createBrowserRouter([
@@ -14,6 +15,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <DashboardPage /> },
       { path: '/add', element: <AddMaintenancePage /> },
       { path: '/history', element: <HistoryCalendarPage /> },
+      { path: '/by-part', element: <ByPartIndexPage /> },
       { path: '/by-part/:code', element: <ByPartPage /> },
     ],
   },

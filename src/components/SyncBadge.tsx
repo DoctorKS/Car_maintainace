@@ -21,10 +21,10 @@ function GearIcon({ className }: { className?: string }) {
 }
 
 /**
- * Top-LEFT floating status chip — spinning gear when there's pending work
- * or the device is offline. Tap to force-flush.
+ * Bottom-LEFT floating sync indicator — just a spinning gear in a white circle.
+ * No text. Tap to force-flush. Hidden when fully synced + online + no error.
  *
- * Hidden when fully synced, online, and no last error.
+ * Tones: brand (busy), amber (offline), rose (errored).
  */
 export default function SyncBadge() {
   const { online, pending, lastError } = useOnlineStatus();
@@ -34,38 +34,30 @@ export default function SyncBadge() {
   const busy = pending > 0;
   const offline = !online;
   const errored = !busy && Boolean(lastError);
+  const spinning = busy || offline;
 
-  const label = offline
-    ? `ออฟไลน์ · คิว ${pending}`
-    : busy
-      ? `กำลังซิงค์ ${pending}`
-      : errored
-        ? 'ซิงค์ผิดพลาด'
-        : '';
-
-  // Pill background + foreground.
   const tone = offline
     ? 'bg-amber-100 text-amber-900'
     : errored
       ? 'bg-rose-100 text-rose-900'
       : 'bg-white text-brand';
 
+  const label = offline
+    ? `ออฟไลน์ — มีคิวค้าง ${pending} รายการ`
+    : busy
+      ? `กำลังซิงค์ ${pending} รายการ`
+      : (lastError ?? 'ซิงค์ผิดพลาด');
+
   return (
-    <div
-      className="fixed left-2 top-2 z-50"
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    <button
+      type="button"
+      onClick={() => scheduleFlush()}
+      title={label}
+      aria-label={label}
+      className={`fixed left-3 z-50 grid h-11 w-11 place-items-center rounded-full shadow-card ${tone}`}
+      style={{ bottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
     >
-      <button
-        type="button"
-        onClick={() => scheduleFlush()}
-        title={lastError ?? undefined}
-        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-soft ${tone}`}
-      >
-        <GearIcon
-          className={`h-4 w-4 ${busy || offline ? 'gear-spin' : ''}`}
-        />
-        <span>{label}</span>
-      </button>
-    </div>
+      <GearIcon className={`h-5 w-5 ${spinning ? 'gear-spin' : ''}`} />
+    </button>
   );
 }

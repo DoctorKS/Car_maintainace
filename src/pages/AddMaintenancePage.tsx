@@ -103,7 +103,7 @@ export default function AddMaintenancePage() {
           ‹ กลับ
         </Link>
         <h1 className="text-base font-semibold text-white">เพิ่มข้อมูล maintainance</h1>
-        <label className="action-pill cursor-pointer">
+        <label className="action-pill-ghost cursor-pointer">
           + เพิ่มรูปภาพ
           <input
             type="file"

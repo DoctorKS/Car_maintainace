@@ -1,7 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
 import { Suspense } from 'react';
-import * as THREE from 'three';
 import { useCarModel } from './useCarModel';
 
 function CarModel() {
@@ -16,32 +15,47 @@ interface CarViewerProps {
 }
 
 /**
- * White-background 3D viewer for the CX-5: black car body + soft contact shadow.
- * The scene is rendered onto an opaque white background so the card looks like
- * a flat product shot.
+ * 3D viewer for the CX-5 — black glossy paint on a soft blurred gradient
+ * background (CSS) to mimic a product-shot look.
+ *
+ * The canvas itself is transparent so the gradient layer behind it shows
+ * through; we add a strong directional rim light + warm hemisphere to give
+ * the black paint glossy highlights.
  */
 export default function CarViewer({ className, autoRotate = true }: CarViewerProps) {
   return (
-    <div className={className}>
+    <div className={`relative ${className ?? ''}`}>
+      {/* Soft gradient backdrop — mimics the user's mockup photo */}
+      <div
+        className="absolute inset-0 -z-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 75% 60% at 50% 35%, #f4f7fb 0%, #c6cfdb 55%, #94a0b1 100%)',
+        }}
+        aria-hidden
+      />
+
       <Canvas
         shadows
-        camera={{ position: [4.2, 1.6, 5.0], fov: 32 }}
+        camera={{ position: [4.5, 1.5, 5.2], fov: 30 }}
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: false, preserveDrawingBuffer: false }}
-        onCreated={({ scene, gl }) => {
-          scene.background = new THREE.Color('#ffffff');
-          gl.setClearColor('#ffffff', 1);
-        }}
+        gl={{ antialias: true, alpha: true, preserveDrawingBuffer: false }}
+        className="relative z-10"
       >
-        <ambientLight intensity={0.85} />
+        {/* Warm-cool key/fill that flatters black paint */}
+        <ambientLight intensity={0.55} />
+        <hemisphereLight color="#ffffff" groundColor="#bcc6d3" intensity={0.7} />
         <directionalLight
-          position={[5, 8, 4]}
-          intensity={1.25}
+          position={[6, 9, 5]}
+          intensity={1.4}
           castShadow
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
-        <hemisphereLight color="#ffffff" groundColor="#dde6f3" intensity={0.6} />
+        {/* Rim from behind to catch the silhouette */}
+        <directionalLight position={[-4, 5, -6]} intensity={0.55} color="#cfd9e6" />
+        {/* Fill from the front to soften shadows on the bumper */}
+        <directionalLight position={[0, 2.5, 8]} intensity={0.35} color="#ffffff" />
 
         <Suspense fallback={null}>
           <CarModel />
@@ -49,8 +63,8 @@ export default function CarViewer({ className, autoRotate = true }: CarViewerPro
 
         <ContactShadows
           position={[0, -0.01, 0]}
-          opacity={0.45}
-          blur={2.6}
+          opacity={0.5}
+          blur={2.4}
           far={3.5}
           resolution={512}
           color="#000000"

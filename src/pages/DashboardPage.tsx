@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import AppShell from '@/components/AppShell';
-import CategoryButtonGrid from '@/components/CategoryButtonGrid';
 import MaintenanceCardList from '@/components/MaintenanceCardList';
 import MileageOverlay from '@/components/MileageOverlay';
 import Spinner from '@/components/Spinner';
@@ -19,28 +18,25 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      {/* Action row — replaces the page title per spec.
-          Three pills: + เพิ่มข้อมูล / ข้อมูลแยกตาม part / ประวัติ
-          The two extra pills scroll-link to the sections lower on the page so
-          everything stays on one route. */}
+      {/* Action row — all three pills share the same brandDeep theme. */}
       <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
-        <Link to="/add" className="action-pill bg-brandDeep text-white shadow-card">
+        <Link to="/add" className="action-pill">
           <span aria-hidden>+</span>
           <span>เพิ่มข้อมูล</span>
         </Link>
-        <a href="#section-by-part" className="action-pill">
+        <Link to="/by-part" className="action-pill">
           ข้อมูลแยกตาม part
-        </a>
+        </Link>
         <Link to="/history" className="action-pill">
           ประวัติ maintainance
         </Link>
       </div>
 
       {/* Hero card: 3D viewer with mileage overlay */}
-      <div className="relative mb-4 h-[42vh] min-h-[260px] overflow-hidden rounded-hero bg-card shadow-card">
+      <div className="relative mb-4 h-[48vh] min-h-[300px] overflow-hidden rounded-hero shadow-card">
         <Suspense
           fallback={
-            <div className="flex h-full items-center justify-center">
+            <div className="flex h-full items-center justify-center bg-card">
               <Spinner />
             </div>
           }
@@ -54,28 +50,6 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-
-      {/* By-part section */}
-      <section id="section-by-part" className="mb-4 scroll-mt-4">
-        <div className="mb-2 px-1 text-sm font-semibold text-white/90">
-          ข้อมูลแยกตาม part
-        </div>
-        <CategoryButtonGrid />
-      </section>
-
-      {/* History entry */}
-      <Link
-        to="/history"
-        className="mb-4 flex items-center justify-between rounded-card bg-card px-4 py-3.5 shadow-soft active:scale-[0.98]"
-      >
-        <div>
-          <div className="text-sm font-semibold text-ink">ประวัติการ maintainance</div>
-          <div className="text-[11px] text-sub">ดูตามวัน / เดือน — มีจุดแดงเมื่อมีบันทึก</div>
-        </div>
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-brandSoft text-brand">
-          ›
-        </span>
-      </Link>
 
       {/* Recent visits */}
       <section className="mb-2">

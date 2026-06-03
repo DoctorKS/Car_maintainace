@@ -115,8 +115,14 @@ input {
     animation: gear-spin 2.4s linear infinite;
     transform-origin: center;
   }
-  /* ปุ่ม action บนพื้นฟ้า (มน, ขาว) */
+  /* ปุ่ม action หลัก — น้ำเงินเข้ม, ตัวขาว (theme เดียวกันทั้งแถว dashboard) */
   .action-pill {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full bg-brandDeep
+           px-3.5 py-2 text-[13px] font-semibold text-white shadow-card
+           active:scale-95 transition;
+  }
+  /* ปุ่ม action รอง — ขาว ตัวฟ้า (รายการล่าสุด / paginate ฯลฯ) */
+  .action-pill-ghost {
     @apply inline-flex items-center justify-center gap-1.5 rounded-full bg-white
            px-3.5 py-2 text-[13px] font-semibold text-brand shadow-soft
            active:scale-95 transition;

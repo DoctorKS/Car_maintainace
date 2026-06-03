@@ -46,7 +46,7 @@ export default function MaintenanceCardList({ userId, pageSize = 5 }: Props) {
           <button
             type="button"
             onClick={hasNext ? nextPage : reset}
-            className="action-pill"
+            className="action-pill-ghost"
           >
             {hasNext ? 'ถัดไป →' : '← กลับต้น'}
           </button>
