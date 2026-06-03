@@ -7,7 +7,7 @@ import type { EntityName } from '@/types/db';
  *
  * - Idempotent via `(user_id, local_uuid)` upserts on visits/items.
  * - Transient errors → exponential backoff per mutation, capped 30s.
- * - Permanent errors (RLS/auth) → recorded in meta + surfaced via SyncBadge.
+ * - Permanent errors (RLS/auth) → recorded in `meta.lastFlushError`.
  */
 
 let flushing = false;

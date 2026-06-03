@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import SyncBadge from './SyncBadge';
 
 interface AppShellProps {
   children: ReactNode;
@@ -8,8 +7,10 @@ interface AppShellProps {
 }
 
 /**
- * Page wrapper — brand-blue background, safe-area aware, hosts the SyncBadge
- * (top-left).
+ * Page wrapper — brand-blue background, safe-area aware.
+ *
+ * The offline-sync gear (SyncBadge) was removed per user request. The
+ * sync queue itself still runs silently via src/lib/sync/flush.ts.
  */
 export default function AppShell({ children, fullBleed = false }: AppShellProps) {
   return (
@@ -20,7 +21,6 @@ export default function AppShell({ children, fullBleed = false }: AppShellProps)
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <SyncBadge />
       <div className={`mx-auto w-full ${fullBleed ? '' : 'max-w-md'} px-4 pt-3 pb-24`}>
         {children}
       </div>

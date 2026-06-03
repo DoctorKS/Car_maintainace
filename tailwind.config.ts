@@ -29,8 +29,11 @@ export default {
         hero: '26px',
       },
       boxShadow: {
-        card: '0 10px 26px rgba(9,38,82,.16)',
-        soft: '0 4px 12px rgba(9,38,82,.10)',
+        // Cards now sit flat on the blue background — no glow halo.
+        card: 'none',
+        soft: 'none',
+        // Keep the calendar "today" pill highlight (it's a brand-blue glow,
+        // not a white one, and signals the selected day).
         today: '0 6px 14px rgba(22,104,204,.4)',
       },
       spacing: {

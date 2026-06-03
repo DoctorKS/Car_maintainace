@@ -14,6 +14,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <DashboardPage /> },
       { path: '/add', element: <AddMaintenancePage /> },
+      { path: '/edit/:visitId', element: <AddMaintenancePage /> },
       { path: '/history', element: <HistoryCalendarPage /> },
       { path: '/by-part', element: <ByPartIndexPage /> },
       { path: '/by-part/:code', element: <ByPartPage /> },

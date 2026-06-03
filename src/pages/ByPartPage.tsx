@@ -37,10 +37,8 @@ export default function ByPartPage() {
           ‹ กลับ
         </Link>
         <div className="flex items-center gap-2">
-          <CategoryIcon code={code} className="h-6 w-6" />
-          <h1 className="text-sm font-semibold text-white">
-            หมวด {code}: {cat.titleTh}
-          </h1>
+          <CategoryIcon code={code} className="h-7 w-7" />
+          <h1 className="text-sm font-semibold text-white">{cat.titleTh}</h1>
         </div>
         <div className="w-12" />
       </div>

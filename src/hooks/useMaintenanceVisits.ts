@@ -105,6 +105,34 @@ export function useVisitDateSet(
   return dates ?? new Set<string>();
 }
 
+/** Single visit hydrated with its items + center — for the edit form. */
+export function useVisitWithItems(
+  visitId: string | undefined,
+): MaintenanceVisitWithItems | null {
+  const value = useLiveQuery(
+    async (): Promise<MaintenanceVisitWithItems | null> => {
+      if (!visitId) return null;
+      const visit = await db.maintenance_visits.get(visitId);
+      if (!visit) return null;
+      const [items, center] = await Promise.all([
+        db.maintenance_items.where('visit_id').equals(visitId).toArray(),
+        visit.service_center_id
+          ? db.service_centers.get(visit.service_center_id)
+          : Promise.resolve(undefined),
+      ]);
+      return {
+        ...visit,
+        items,
+        service_center: center ?? null,
+        total_amount: items.reduce((s, i) => s + Number(i.total_price ?? 0), 0),
+      };
+    },
+    [visitId],
+    null,
+  );
+  return value ?? null;
+}
+
 export function useVisitCount(userId: string | undefined): number {
   return (
     useLiveQuery(

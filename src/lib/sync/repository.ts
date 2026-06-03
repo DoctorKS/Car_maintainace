@@ -152,6 +152,93 @@ export async function insertVisit(
   return { visitId, pendingReceipt: Boolean(draft.receiptBlob) };
 }
 
+/**
+ * Update an existing visit + its items.
+ *
+ * Strategy: keep the visit row (so its id + local_uuid stay stable), but
+ * fully replace the items by deleting old rows and inserting fresh ones.
+ * The mutation queue is FIFO and idempotent, so on the server we get
+ * `delete(items.old) → insert(items.new) → update(visit)` in order, with
+ * no risk of stale items lingering.
+ *
+ * Receipt upload behaviour matches insertVisit: a new Blob is queued for
+ * upload + a follow-up update patches `receipt_image_path`. If no new blob
+ * is attached, the previous receipt_image_path is preserved.
+ */
+export async function updateVisit(
+  userId: string,
+  visitId: string,
+  draft: DraftVisit,
+): Promise<{ pendingReceipt: boolean }> {
+  const existing = await db.maintenance_visits.get(visitId);
+  if (!existing) throw new Error('ไม่พบรายการที่จะแก้ไข');
+
+  const updated_at = nowIso();
+  const receiptPath = draft.receiptBlob
+    ? `${userId}/${visitId}/${uuid()}.jpg`
+    : existing.receipt_image_path;
+
+  const visit: MaintenanceVisitRow = {
+    ...existing,
+    service_date: draft.serviceDate,
+    mileage: draft.mileage,
+    service_center_id: draft.serviceCenterId,
+    receipt_image_path: receiptPath,
+    notes: draft.notes ?? existing.notes,
+    updated_at,
+  };
+
+  const newItems: MaintenanceItemRow[] = draft.items.map((d) => ({
+    id: uuid(),
+    local_uuid: uuid(),
+    visit_id: visitId,
+    user_id: userId,
+    category_code: d.categoryCode,
+    part_name: d.partName,
+    quantity: d.quantity,
+    total_price: d.totalPrice,
+    created_at: updated_at,
+  }));
+
+  await db.transaction(
+    'rw',
+    [db.maintenance_visits, db.maintenance_items, db.pending_mutations, db.pending_uploads],
+    async () => {
+      // 1) Delete old items locally + queue server deletes.
+      const oldItems = await db.maintenance_items.where('visit_id').equals(visitId).toArray();
+      for (const old of oldItems) {
+        await db.maintenance_items.delete(old.id);
+        await enqueue('maintenance_items', 'delete', { id: old.id, user_id: userId });
+      }
+
+      // 2) Insert replacement items.
+      await db.maintenance_items.bulkPut(newItems.map((i) => ({ ...i, _dirty: 1 })));
+      for (const it of newItems) {
+        await enqueue('maintenance_items', 'insert', it);
+      }
+
+      // 3) Update the visit row.
+      await db.maintenance_visits.put({ ...visit, _dirty: 1 });
+      await enqueue('maintenance_visits', 'update', visit);
+
+      // 4) If a new photo was attached, queue upload + later receipt-path patch.
+      if (draft.receiptBlob && receiptPath && receiptPath !== existing.receipt_image_path) {
+        await db.pending_uploads.add({
+          visit_id: visitId,
+          storage_path: receiptPath,
+          blob: draft.receiptBlob,
+          mime: draft.receiptMime ?? 'image/jpeg',
+          attempts: 0,
+          created_at: Date.now(),
+        });
+      }
+    },
+  );
+
+  scheduleFlush();
+  return { pendingReceipt: Boolean(draft.receiptBlob) };
+}
+
 export async function deleteVisit(visitId: string): Promise<void> {
   const v = await db.maintenance_visits.get(visitId);
   if (!v) return;
