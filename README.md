@@ -169,6 +169,7 @@ erDiagram
         text part_name
         numeric quantity
         numeric total_price
+        text notes "0002 migration"
     }
     CUSTOM_PARTS {
         uuid id PK
@@ -282,14 +283,17 @@ flowchart LR
     L -->|sign in| D
     B -- yes --> D[/Dashboard/]
 
-    D -->|tap '+ เพิ่มข้อมูล'| ADD[/Add maintenance/]
-    D -->|tap 'ประวัติ'| H[/History calendar/]
-    D -->|tap category| BP[/By-part/]
+    D -->|'+ เพิ่มข้อมูล'| ADD[/Add maintenance/]
+    D -->|'ประวัติ maintainance'| H[/History calendar/]
+    D -->|'ข้อมูลแยกตาม part'| BPI[/By-part index — 6 symbols/]
+    D -->|tap pencil on a card| EDIT[/edit/:visitId same form/]
     D -->|tap mileage| MI[Edit mileage inline]
     D -->|tap card receipt| R[/Receipt modal/]
 
     ADD -->|save| D
-    H -->|tap day w/ red dot| HC[Day's cards]
+    EDIT -->|save / delete| D
+    H -->|tap day w/ red dot| HC[Day's cards] -->|pencil| EDIT
+    BPI -->|tap symbol| BP[/By-part/:code/]
     BP -->|tap part| TL[Timeline of dates+price]
 ```
 
@@ -359,31 +363,32 @@ src/
 
   pages/
     LoginPage.tsx                 Email + password, iOS "Add to Home Screen" hint
-    DashboardPage.tsx             Header + 3D + mileage overlay + categories + history link + recent cards
-    AddMaintenancePage.tsx        Thai date picker, 6 collapsible category sections, receipt upload
+    DashboardPage.tsx             3-pill action row + 3D + mileage overlay + recent cards
+    AddMaintenancePage.tsx        Shared form for /add AND /edit/:visitId
     HistoryCalendarPage.tsx       Thai calendar w/ red dots, day card on tap
+    ByPartIndexPage.tsx           2×3 grid of category symbols (transparent, no labels)
     ByPartPage.tsx                Drill-in to category, tap part → timeline
 
   components/
-    AppShell.tsx                  Safe-area-aware wrapper
+    AppShell.tsx                  Brand-blue, safe-area-aware wrapper
     AuthGuard.tsx                 Redirects to /login when session is null
-    OfflineBadge.tsx              Top-right floating chip (queue + offline + error)
     MileageOverlay.tsx            Inline-editable mileage on the 3D viewer
-    CategoryButtonGrid.tsx        3×2 grid → /by-part/:code
-    CategoryIcon.tsx              Inline SVG glyphs for the 6 categories
-    MaintenanceCard.tsx           Single visit card with sub-card items
+    CategoryIcon.tsx              <img> wrapper for public/icons/categories/cat-N.png
+    MaintenanceCard.tsx           Visit card with sub-card items + pencil edit + notes
     MaintenanceCardList.tsx       Paginated card list
     ReceiptImageButton.tsx        Opens ReceiptModal
     ReceiptModal.tsx              Signed-URL image viewer
-    ThaiDatePicker.tsx            Input + popover ThaiCalendar
-    ThaiCalendar.tsx              Month grid w/ red dots + Thai weekday labels
+    ThaiDatePicker.tsx            Input + popover CalendarGrid
+    CalendarGrid.tsx              Month grid w/ red dots + Thai weekday labels
     PartDropdown.tsx              Select existing part or "+ อื่นๆ" inline-add
     ServiceCenterDropdown.tsx     Same pattern for service centers
-    CategorySection.tsx           Collapsible category w/ qty + ราคา rows
+    CategorySection.tsx           Collapsible category w/ qty + unit + total + notes
     Spinner.tsx
 
 supabase/
-  migrations/0001_init.sql        Tables + RLS + new-user trigger + storage bucket
+  migrations/
+    0001_init.sql                 Tables + RLS + new-user trigger + storage bucket
+    0002_item_notes.sql           Adds maintenance_items.notes (must be run!)
 ```
 
 ---
@@ -401,8 +406,12 @@ cp .env.example .env.local         # fill in VITE_SUPABASE_URL + VITE_SUPABASE_A
 
 1. Create a project at https://supabase.com.
 2. Copy the API URL + `anon` public key into `.env.local`.
-3. Supabase dashboard → SQL editor → paste & run
-   [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql).
+3. Supabase dashboard → SQL editor → run migrations **in order**:
+   - [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
+     — tables, RLS, new-user seed trigger, storage bucket.
+   - [`supabase/migrations/0002_item_notes.sql`](supabase/migrations/0002_item_notes.sql)
+     — adds `maintenance_items.notes`. **Skip this and every per-item insert
+     will fail** with `column "notes" does not exist`.
 4. Authentication → Providers → enable **Email**.
 
 Or via [Supabase CLI](https://supabase.com/docs/guides/cli):
@@ -410,7 +419,7 @@ Or via [Supabase CLI](https://supabase.com/docs/guides/cli):
 ```bash
 supabase login
 supabase link --project-ref YOUR_REF
-supabase db push
+supabase db push     # applies every file under supabase/migrations/ in order
 ```
 
 ### 3. Dev / build
@@ -419,7 +428,7 @@ supabase db push
 npm run dev           # http://localhost:5173
 npm run build         # production bundle in dist/
 npm run preview       # serve dist locally
-npm test              # vitest unit tests (16 thai-date tests)
+npm test              # vitest unit tests (24 thai-date tests)
 npm run typecheck     # tsc --noEmit
 ```
 
@@ -454,13 +463,16 @@ subsequent launches load it offline.
 
 ```
 npm test
-✓ src/lib/thai-date/index.test.ts (16 tests)
-  - BE conversion (toBE / fromBE)
-  - all 7 formatters (short, shortMonth, medium, long, BE year, monthYear)
+✓ src/lib/thai-date/index.test.ts (24 tests)
+  - BE conversion (toBE / fromBE; Date + number overload)
+  - all 8 formatters (short, shortMonth, medium, formatThaiDate alias,
+    formatThaiDateLong, long, BE year, monthYear)
   - leap year (29 ก.พ. 2567), 1 ม.ค., 31 ธ.ค.
   - Thai numerals (๐-๙)
   - weekdays (อา. / อาทิตย์)
   - ISO date round-trips
+  - buildCalendarGrid (always 42 cells; 30-day June, 29-day Feb 2024)
+  - dayKey YYYY-MM-DD; THAI_WEEKDAYS shape
 ```
 
 ### RLS cross-check
@@ -481,22 +493,44 @@ Run Chrome DevTools → Lighthouse → PWA. Target ≥ 90.
 
 ---
 
+## Recent additions
+
+- **Editable visits** — every `MaintenanceCard` now has a pencil button. Tap →
+  `/edit/:visitId` (re-uses `AddMaintenancePage` with pre-fill +
+  `repository.updateVisit`). Edits propagate via `useLiveQuery` to the
+  dashboard, history, and by-part timelines automatically.
+- **Per-item notes** — each item row in the Add form has a "หมายเหตุ" textarea;
+  rendered as a 📝 pill in `MaintenanceCard` sub-rows. Backed by
+  `maintenance_items.notes` (migration 0002).
+- **Visit-level note** — a "หมายเหตุ" card above the sticky save bar; shown as a
+  brand-soft pill between the card header and items list.
+- **Three-pill dashboard** — `+ เพิ่มข้อมูล`, `ข้อมูลแยกตาม part`,
+  `ประวัติ maintainance` all share `.action-pill` styling.
+- **/by-part index** — separate page from the dashboard: 2 cols × 3 rows of big
+  transparent symbols, no labels.
+- **PNG category icons** — `public/icons/categories/cat-{1..6}.png` (10–56 KB
+  each, compressed from `/Button/*.png` originals). Replaces inline SVGs.
+- **3D viewer reverted to FBX-default colours** — the early "all black on
+  white" pass is gone; `useCarModel` body slot is a no-op so the source
+  material shows through. Soft radial-gradient backdrop kept.
+- **No on-screen sync indicator** — the previous SyncBadge gear is removed.
+  Sync still runs silently; check DevTools console for `[sync] ... error` (now
+  logged at `error` level).
+- **Card shadows = none** — `shadow-card` / `shadow-soft` Tailwind tokens are
+  intentionally empty; the white halo on blue read as glow and is gone.
+
 ## Open items
 
-1. **Button assets** — the repo contains
-   [`Button/Filter_emission_sys.png`](Button/Filter_emission_sys.png), only one
-   of the six category buttons. Until the full set lands,
-   [`CategoryIcon.tsx`](src/components/CategoryIcon.tsx) renders inline SVGs as
-   placeholders. To swap, drop PNG/SVG files into `public/icons/categories/`
-   and import them in `CategoryIcon`.
-2. **FBX mesh-name mapping** — texture substring rules in
+1. **FBX mesh-name mapping** — texture substring rules in
    [`useCarModel.ts`](src/three/useCarModel.ts) (`/tire|wheel/`, `/light|lamp/`,
    etc.) need one-time confirmation against the actual mesh names of the
    shipped FBX. See [`src/three/inspect-fbx.md`](src/three/inspect-fbx.md) for
    the inspection snippet.
-3. **Universal Sans license** — using Inter + IBM Plex Sans Thai as a free
+2. **Universal Sans license** — using Inter + IBM Plex Sans Thai as a free
    substitute. To switch to a licensed Universal Sans build, replace the woff2
    files in `public/fonts/` and update the `@font-face` family names in
    [`src/index.css`](src/index.css).
-4. **`gh` CLI not installed** — pushing to GitHub uses raw `git push`; there's
+3. **`gh` CLI not installed** — pushing to GitHub uses raw `git push`; there's
    no PR / issue tooling configured locally.
+4. **Migration 0002 must be applied to the live Supabase project** before users
+   can save records with the new code, or per-item inserts will fail.

@@ -39,7 +39,7 @@ export async function flushNow(): Promise<void> {
     await drainUploads();
     await db.meta.put({ key: META_KEYS.lastFlushError, value: null });
   } catch (err) {
-    console.warn('[sync] flush error', err);
+    console.error('[sync] flush error', err);
     await db.meta.put({
       key: META_KEYS.lastFlushError,
       value: (err as Error)?.message ?? String(err),

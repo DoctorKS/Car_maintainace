@@ -54,8 +54,19 @@ export default function AddMaintenancePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // First-render only: default mileage from the vehicle when adding.
+  // Reset hydration flags when the route param changes so navigating
+  // /add → /edit/X → /edit/Y (without a full reload) re-seeds the form
+  // for the new target instead of clinging to the previous one. This
+  // was a real "ข้อมูลไม่ขึ้น" symptom when tapping the pencil on
+  // consecutive cards.
   const seededFromVehicle = useRef(false);
+  const seededFromExisting = useRef(false);
+  useEffect(() => {
+    seededFromVehicle.current = false;
+    seededFromExisting.current = false;
+  }, [visitId]);
+
+  // First-render only: default mileage from the vehicle when adding.
   useEffect(() => {
     if (editing) return;
     if (seededFromVehicle.current || !vehicle) return;
@@ -64,7 +75,7 @@ export default function AddMaintenancePage() {
   }, [editing, vehicle]);
 
   // First-render only: hydrate from an existing visit when editing.
-  const seededFromExisting = useRef(false);
+  // The ref is reset above whenever visitId changes.
   useEffect(() => {
     if (!editing || seededFromExisting.current || !existing) return;
     setDate(fromLocalIsoDate(existing.service_date));

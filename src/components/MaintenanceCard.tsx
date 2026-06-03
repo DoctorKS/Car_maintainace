@@ -88,30 +88,31 @@ export default function MaintenanceCard({ visit }: Props) {
         {visit.items.map((it) => {
           const cat = isCategoryCode(it.category_code) ? getCategory(it.category_code) : null;
           return (
-            <div key={it.id} className="rounded-tile bg-brandSoft px-3 py-2">
-              <div className="flex items-center gap-2 text-[11px] text-sub">
-                {isCategoryCode(it.category_code) && (
-                  <CategoryIcon
-                    code={it.category_code}
-                    className="h-7 w-7 shrink-0"
-                  />
-                )}
-                <span className="truncate font-medium text-ink/70">{cat?.titleTh ?? ''}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-sm">
-                <div className="min-w-0 flex-1 truncate font-medium text-ink">
-                  {it.part_name}
-                </div>
-                <div className="shrink-0 text-xs text-sub">×{it.quantity}</div>
-                <div className="shrink-0 text-sm font-semibold text-ink">
-                  ฿ {baht(Number(it.total_price))}
-                </div>
-              </div>
-              {it.notes && it.notes.trim() && (
-                <div className="mt-1 whitespace-pre-wrap rounded-md bg-white/60 px-2 py-1 text-[11px] italic leading-snug text-sub">
-                  📝 {it.notes}
-                </div>
+            <div key={it.id} className="flex items-center gap-3 rounded-tile bg-brandSoft p-3">
+              {/* Symbol on the left — 3× the previous 28 px */}
+              {isCategoryCode(it.category_code) && (
+                <CategoryIcon
+                  code={it.category_code}
+                  className="h-[84px] w-[84px] shrink-0 self-start"
+                />
               )}
+              <div className="flex min-w-0 flex-1 flex-col justify-center">
+                <div className="text-[11px] font-medium text-sub">{cat?.titleTh ?? ''}</div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-sm">
+                  <div className="min-w-0 flex-1 truncate font-medium text-ink">
+                    {it.part_name}
+                  </div>
+                  <div className="shrink-0 text-xs text-sub">×{it.quantity}</div>
+                  <div className="shrink-0 text-sm font-semibold text-ink">
+                    ฿ {baht(Number(it.total_price))}
+                  </div>
+                </div>
+                {it.notes && it.notes.trim() && (
+                  <div className="mt-1 whitespace-pre-wrap rounded-md bg-white/70 px-2 py-1 text-[11px] italic leading-snug text-sub">
+                    📝 {it.notes}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}

@@ -19,7 +19,7 @@ installFlushListeners();
 // Initial pull + flush on app boot if already authenticated.
 supabase.auth.getSession().then(({ data }) => {
   if (data.session) {
-    pullAll().catch((e) => console.warn('[pull] initial failed', e));
+    pullAll().catch((e) => console.error('[pull] initial failed', e));
     scheduleFlush();
   }
 });
@@ -27,7 +27,7 @@ supabase.auth.getSession().then(({ data }) => {
 // Re-pull / re-flush on auth state changes (sign-in/sign-out).
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN' && session) {
-    pullAll().catch((e) => console.warn('[pull] after sign-in failed', e));
+    pullAll().catch((e) => console.error('[pull] after sign-in failed', e));
     scheduleFlush();
   }
 });
