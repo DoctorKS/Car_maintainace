@@ -16,6 +16,7 @@ import { ocrReceipt, type OcrItem } from '@/lib/ocr';
 import { fromLocalIsoDate, toLocalIsoDate } from '@/lib/thai-date';
 import { breakdown } from '@/lib/vat';
 import OcrReview from '@/components/OcrReview';
+import ImageLightbox from '@/components/ImageLightbox';
 import type { DraftItem } from '@/types/domain';
 
 const emptyRows = (): Record<CategoryCode, DraftItem[]> => ({
@@ -65,6 +66,9 @@ export default function AddMaintenancePage() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrItems, setOcrItems] = useState<OcrItem[] | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
+
+  // Lightbox state — opened when the user taps the receipt thumbnail.
+  const [zoomingImage, setZoomingImage] = useState<boolean>(false);
 
   // Reset hydration flags when the route param changes so navigating
   // /add → /edit/X → /edit/Y (without a full reload) re-seeds the form
@@ -314,10 +318,13 @@ export default function AddMaintenancePage() {
         </h1>
         <label className="action-pill-ghost cursor-pointer">
           + เพิ่มรูปภาพ
+          {/* No `capture` attribute — iOS Safari shows the action sheet
+              with both "Photo Library" and "Take Photo or Video", so the
+              user can either upload an existing receipt or shoot a new
+              one. */}
           <input
             type="file"
             accept="image/*"
-            capture="environment"
             onChange={handlePickImage}
             className="hidden"
           />
@@ -327,16 +334,25 @@ export default function AddMaintenancePage() {
       {receipt && (
         <div className="mb-3 rounded-card bg-card p-2">
           <div className="flex items-center gap-3">
-            <img
-              src={receipt.previewUrl}
-              alt="ใบเสร็จ"
-              className="h-16 w-16 rounded-tile object-cover"
-            />
+            {/* Tap to open ImageLightbox — pinch-zoom-able fullscreen view. */}
+            <button
+              type="button"
+              onClick={() => setZoomingImage(true)}
+              aria-label="ขยายรูปใบเสร็จ"
+              className="block h-16 w-16 shrink-0 overflow-hidden rounded-tile ring-1 ring-line active:scale-95"
+            >
+              <img
+                src={receipt.previewUrl}
+                alt="ใบเสร็จ"
+                className="h-full w-full object-cover"
+              />
+            </button>
             <div className="flex-1 text-xs">
               <div className="font-semibold text-ink">แนบรูปใบเสร็จ</div>
               <div className="text-sub">
                 {Math.round((receipt.blob.size / 1024) * 10) / 10} KB · {receipt.mime}
               </div>
+              <div className="mt-0.5 text-[10px] text-brand">แตะรูปเพื่อขยาย</div>
             </div>
             <button
               type="button"
@@ -481,6 +497,14 @@ export default function AddMaintenancePage() {
           items={ocrItems}
           onSave={handleOcrCommit}
           onCancel={() => setOcrItems(null)}
+        />
+      )}
+
+      {zoomingImage && receipt && (
+        <ImageLightbox
+          src={receipt.previewUrl}
+          alt="ใบเสร็จ"
+          onClose={() => setZoomingImage(false)}
         />
       )}
     </AppShell>
